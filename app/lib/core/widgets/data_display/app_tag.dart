@@ -15,7 +15,7 @@ class AppTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final tagColor = color ?? theme.colorScheme.primary.withOpacity(0.1);
+    final tagColor = color ?? theme.colorScheme.primary.withValues(alpha: 0.1);
     final tagTextColor = textColor ?? theme.colorScheme.primary;
 
     return Container(

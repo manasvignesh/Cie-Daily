@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../user/data/firebase_user_repository.dart';
+import '../providers/auth_provider.dart';
 import '../../../core/widgets/buttons/primary_button.dart';
 
 class ProfileSetupScreen extends ConsumerStatefulWidget {
@@ -29,18 +30,17 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final user = Supabase.instance.client.auth.currentUser;
+      final user = ref.read(authStateProvider).value;
       if (user != null) {
-        await Supabase.instance.client.from('users').insert({
-          'id': user.id,
-          'email': user.email,
-          'full_name': _nameController.text.trim(),
-          'department': _departmentController.text.trim(),
-          'year_of_study': int.tryParse(_yearController.text.trim()) ?? 1,
-        });
-        // The auth state should automatically update because of the realtime trigger/check or manual refresh
-        // But for simplicity in this milestone, we can just trigger a manual check or router reload.
-        // The AppRouter will handle navigation automatically if we update the user's local metadata or invalidate the auth provider.
+        await ref.read(userRepositoryProvider).createUserProfile(
+          uid: user.uid,
+          email: user.email ?? '',
+          fullName: _nameController.text.trim(),
+          department: _departmentController.text.trim(),
+          yearOfStudy: int.tryParse(_yearController.text.trim()) ?? 1,
+        );
+        // Invalidate auth provider to trigger re-evaluation of routing state
+        ref.invalidate(authControllerProvider);
       }
     } catch (e) {
       // Show error

@@ -19,7 +19,7 @@ class LoadingSkeleton extends StatelessWidget {
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.1),
+        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(borderRadius),
       ),
     )
@@ -33,18 +33,18 @@ class PostSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+    return const Padding(
+      padding: EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const LoadingSkeleton(width: 48, height: 48, borderRadius: 24),
-              const SizedBox(width: 12),
+              LoadingSkeleton(width: 48, height: 48, borderRadius: 24),
+              SizedBox(width: 12),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
+                children: [
                   LoadingSkeleton(width: 120, height: 16),
                   SizedBox(height: 8),
                   LoadingSkeleton(width: 80, height: 12),
@@ -52,10 +52,10 @@ class PostSkeleton extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          const LoadingSkeleton(width: double.infinity, height: 200, borderRadius: 16),
-          const SizedBox(height: 16),
-          const LoadingSkeleton(width: 200, height: 16),
+          SizedBox(height: 16),
+          LoadingSkeleton(width: double.infinity, height: 200, borderRadius: 16),
+          SizedBox(height: 16),
+          LoadingSkeleton(width: 200, height: 16),
         ],
       ),
     );

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
 import '../providers/feed_provider.dart';
+import '../data/firebase_feed_repository.dart';
 import '../services/engagement_service.dart';
 import '../widgets/post_card.dart';
 import '../widgets/comments_bottom_sheet.dart';
@@ -42,55 +45,78 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final feedState = ref.watch(feedProvider);
+    final user = FirebaseAuth.instance.currentUser;
+    final isMlritUser = user?.email?.endsWith('@mlrit.ac.in') ?? false;
 
     return Scaffold(
-      body: feedState.when(
-        data: (posts) {
-          if (posts.isEmpty) {
-            return const EmptyState(
-              title: 'No Posts Yet',
-              message: 'Check back later for new drops!',
-              icon: Icons.inbox_outlined,
-            );
-          }
-          return PageView.builder(
-            controller: _pageController,
-            scrollDirection: Axis.vertical,
-            physics: const BouncingScrollPhysics(),
-            itemCount: posts.length,
-            onPageChanged: (index) async {
-              // Report previous post
-              await ref.read(engagementServiceProvider).stopTrackingAndReport();
-              // Start tracking new post
-              ref.read(engagementServiceProvider).startTracking(posts[index].id);
-
-              if (index >= posts.length - 2) {
-                // Fetch more when near the end
-                ref.read(feedProvider.notifier).fetchNextPage();
+      body: Stack(
+        children: [
+          feedState.when(
+            data: (posts) {
+              if (posts.isEmpty) {
+                return const EmptyState(
+                  title: 'No Posts Yet',
+                  message: 'Check back later for new drops!',
+                  icon: Icons.inbox_outlined,
+                );
               }
-            },
-            itemBuilder: (context, index) {
-              final post = posts[index];
-              return PostCard(
-                post: post,
-                onLike: () {
-                  // Toggle like optimistically
+              return PageView.builder(
+                controller: _pageController,
+                scrollDirection: Axis.vertical,
+                physics: const BouncingScrollPhysics(),
+                itemCount: posts.length,
+                onPageChanged: (index) async {
+                  // Report previous post
+                  await ref.read(engagementServiceProvider).stopTrackingAndReport();
+                  // Start tracking new post
+                  ref.read(engagementServiceProvider).startTracking(posts[index].id);
                 },
-                onComment: () {
-                  CommentsBottomSheet.show(context, post.id);
-                },
-                onShare: () {
-                  // Share functionality
+                itemBuilder: (context, index) {
+                  final post = posts[index];
+                  return PostCard(
+                    post: post,
+                    onLike: (isLiked) {
+                      ref.read(feedRepositoryProvider).toggleLike(post.id, isLiked);
+                    },
+                    onBookmark: (isBookmarked) {
+                      ref.read(feedRepositoryProvider).toggleBookmark(post.id, isBookmarked);
+                    },
+                    onComment: () {
+                      CommentsBottomSheet.show(context, post.id);
+                    },
+                    onShare: () {
+                      // Share functionality
+                    },
+                  );
                 },
               );
             },
-          );
-        },
-        loading: () => const Center(child: PostSkeleton()),
-        error: (err, stack) => ErrorState(
-          message: err.toString(),
-          onRetry: () => ref.read(feedProvider.notifier).fetchInitial(),
-        ),
+            loading: () => const Center(child: PostSkeleton()),
+            error: (err, stack) => ErrorState(
+              message: err.toString(),
+              onRetry: () => ref.refresh(feedProvider),
+            ),
+          ),
+          
+          if (isMlritUser)
+            Positioned(
+              top: 0,
+              right: 16,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: FloatingActionButton(
+                    mini: true,
+                    onPressed: () {
+                      context.push('/create_video_post');
+                    },
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    child: const Icon(Icons.add),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

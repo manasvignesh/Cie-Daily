@@ -1,0 +1,8 @@
+﻿flutter.zip
+scratch_livekit/
+app/android/app/google-services.json
+app/firebase.json
+app/.firebaserc
+.vscode/
+node_modules/
+app/build/

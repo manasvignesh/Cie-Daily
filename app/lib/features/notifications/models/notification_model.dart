@@ -21,8 +21,8 @@ class NotificationModel {
       title: json['title'] as String,
       body: json['body'] as String,
       type: json['type'] as String? ?? 'system',
-      isRead: json['is_read'] as bool? ?? false,
-      createdAt: DateTime.parse(json['created_at'] as String),
+      isRead: json['isRead'] as bool? ?? false,
+      createdAt: DateTime.parse(json['createdAt'] as String),
     );
   }
 }

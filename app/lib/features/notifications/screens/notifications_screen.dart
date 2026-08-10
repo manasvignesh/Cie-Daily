@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/notifications_provider.dart';
-import '../data/notification_repository.dart';
+import '../domain/notification_repository.dart';
+import '../data/firebase_notification_repository.dart';
 import '../../../core/widgets/indicators/loading_skeleton.dart';
 
 class NotificationsScreen extends ConsumerWidget {

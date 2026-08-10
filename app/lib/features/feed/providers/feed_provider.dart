@@ -1,51 +1,33 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../data/feed_repository.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import '../domain/feed_repository.dart';
+import '../data/firebase_feed_repository.dart';
 import '../models/post_model.dart';
+import '../../auth/providers/auth_provider.dart';
 
-final feedProvider = StateNotifierProvider<FeedNotifier, AsyncValue<List<PostModel>>>((ref) {
-  return FeedNotifier(ref.watch(feedRepositoryProvider));
+final feedProvider = StreamProvider.autoDispose<List<PostModel>>((ref) async* {
+  final user = await FirebaseAuth.instance.authStateChanges().firstWhere((u) => u != null);
+  
+  yield* FirebaseFirestore.instance
+      .collection('posts')
+      .where('category', isEqualTo: 'Reel')
+      .where('status', isEqualTo: 'approved')
+      .orderBy('createdAt', descending: true)
+      .limit(50) // Cap to recent 50 for now for real-time stream
+      .snapshots()
+      .map((snapshot) {
+        final posts = snapshot.docs
+          .map((doc) {
+            final data = doc.data();
+            final likedBy = List<String>.from(data['likedBy'] ?? []);
+            final bookmarkedBy = List<String>.from(data['bookmarkedBy'] ?? []);
+            data['isLikedByCurrentUser'] = user?.uid != null && likedBy.contains(user!.uid);
+            data['isBookmarkedByCurrentUser'] = user?.uid != null && bookmarkedBy.contains(user!.uid);
+            return PostModel.fromMap(data, doc.id);
+          })
+          .toList();
+        
+        return posts;
+      });
 });
-
-class FeedNotifier extends StateNotifier<AsyncValue<List<PostModel>>> {
-  final FeedRepository _repository;
-  int _offset = 0;
-  final int _limit = 10;
-  bool _hasMore = true;
-
-  FeedNotifier(this._repository) : super(const AsyncValue.loading()) {
-    fetchInitial();
-  }
-
-  Future<void> fetchInitial() async {
-    state = const AsyncValue.loading();
-    _offset = 0;
-    _hasMore = true;
-    try {
-      final posts = await _repository.fetchPosts(offset: _offset, limit: _limit);
-      _hasMore = posts.length == _limit;
-      state = AsyncValue.data(posts);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
-  }
-
-  Future<void> fetchNextPage() async {
-    if (!_hasMore || state.isLoading || state.isRefreshing) return;
-
-    final currentPosts = state.value ?? [];
-    
-    // Optimistic UI state while loading
-    state = AsyncValue.data(currentPosts);
-    _offset += _limit;
-
-    try {
-      final newPosts = await _repository.fetchPosts(offset: _offset, limit: _limit);
-      _hasMore = newPosts.length == _limit;
-      state = AsyncValue.data([...currentPosts, ...newPosts]);
-    } catch (e, st) {
-      // Revert offset on error
-      _offset -= _limit;
-      state = AsyncValue.error(e, st);
-    }
-  }
-}

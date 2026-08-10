@@ -19,7 +19,7 @@ class AppAvatar extends StatelessWidget {
     
     return CircleAvatar(
       radius: radius,
-      backgroundColor: theme.colorScheme.primary.withOpacity(0.1),
+      backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.1),
       backgroundImage: imageUrl != null && imageUrl!.isNotEmpty
           ? CachedNetworkImageProvider(imageUrl!)
           : null,

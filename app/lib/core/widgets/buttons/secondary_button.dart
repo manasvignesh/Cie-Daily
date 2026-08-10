@@ -24,7 +24,7 @@ class SecondaryButton extends StatelessWidget {
         style: OutlinedButton.styleFrom(
           foregroundColor: Theme.of(context).colorScheme.primaryText,
           side: BorderSide(
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.12),
+            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.12),
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),

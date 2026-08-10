@@ -41,7 +41,7 @@ class AppChip extends StatelessWidget {
       side: BorderSide(
         color: isSelected 
             ? Colors.transparent 
-            : Theme.of(context).colorScheme.onSurface.withOpacity(0.1),
+            : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
       ),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),

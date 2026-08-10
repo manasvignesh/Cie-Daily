@@ -16,7 +16,9 @@ class AppBottomSheet {
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         ),
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
+          bottom: MediaQuery.of(context).viewInsets.bottom > 0
+              ? MediaQuery.of(context).viewInsets.bottom
+              : MediaQuery.of(context).padding.bottom,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -26,7 +28,7 @@ class AppBottomSheet {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.2),
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(2),
               ),
             ),

@@ -25,7 +25,7 @@ class BaseCard extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(20),
         side: BorderSide(
-          color: Theme.of(context).colorScheme.onSurface.withOpacity(0.05),
+          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
         ),
       ),
       clipBehavior: Clip.antiAlias,

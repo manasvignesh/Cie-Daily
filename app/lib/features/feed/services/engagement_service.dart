@@ -1,14 +1,19 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-final engagementServiceProvider = Provider((ref) => EngagementService(Supabase.instance.client));
+final engagementServiceProvider = Provider((ref) => EngagementService(
+  FirebaseFirestore.instance, 
+  FirebaseAuth.instance,
+));
 
 class EngagementService {
-  final SupabaseClient _supabase;
+  final FirebaseFirestore _firestore;
+  final FirebaseAuth _auth;
   DateTime? _postStartTime;
   String? _currentPostId;
 
-  EngagementService(this._supabase);
+  EngagementService(this._firestore, this._auth);
 
   void startTracking(String postId) {
     _postStartTime = DateTime.now();
@@ -21,17 +26,18 @@ class EngagementService {
     final duration = DateTime.now().difference(_postStartTime!);
     final viewDurationSeconds = duration.inSeconds;
 
-    final userId = _supabase.auth.currentUser?.id;
+    final userId = _auth.currentUser?.uid;
     if (userId == null) return;
 
     if (viewDurationSeconds >= 2) {
       try {
-        await _supabase.from('post_engagements').upsert({
-          'post_id': _currentPostId,
-          'user_id': userId,
-          'view_duration_seconds': viewDurationSeconds,
-          'last_viewed_at': DateTime.now().toIso8601String(),
-        });
+        final docId = '${userId}_$_currentPostId';
+        await _firestore.collection('postEngagements').doc(docId).set({
+          'postId': _currentPostId,
+          'userId': userId,
+          'viewDurationSeconds': viewDurationSeconds,
+          'lastViewedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
       } catch (e) {
         // Silently fail for analytics
       }

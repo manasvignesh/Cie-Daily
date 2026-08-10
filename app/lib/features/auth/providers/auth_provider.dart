@@ -1,10 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../data/auth_repository.dart';
 
 enum AuthStatus { initial, unauthenticated, authenticatedStudent, authenticatedAdmin, profileIncomplete }
 
-final authStateProvider = StreamProvider<AuthState>((ref) {
+final authStateProvider = StreamProvider<User?>((ref) {
   return ref.watch(authRepositoryProvider).authStateChanges;
 });
 
@@ -17,47 +17,79 @@ class AuthController extends StateNotifier<AuthStatus> {
 
   AuthController(this._repository) : super(AuthStatus.initial) {
     _checkInitialState();
-    _repository.authStateChanges.listen((data) {
-      _handleAuthChange(data.session?.user);
-    });
+    try {
+      _repository.authStateChanges.listen((user) {
+        _handleAuthChange(user);
+      }, onError: (err) {
+        state = AuthStatus.unauthenticated;
+      });
+    } catch (_) {
+      state = AuthStatus.unauthenticated;
+    }
   }
 
   Future<void> _checkInitialState() async {
-    final user = _repository.currentUser;
-    await _handleAuthChange(user);
+    try {
+      // Give a maximum of 2 seconds for initial auth check before falling back
+      final user = await Future<User?>.value(_repository.currentUser).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => null,
+      );
+      await _handleAuthChange(user);
+    } catch (e) {
+      state = AuthStatus.unauthenticated;
+    }
   }
 
   Future<void> _handleAuthChange(User? user) async {
-    if (user == null) {
+    try {
+      if (user == null) {
+        state = AuthStatus.unauthenticated;
+        return;
+      }
+
+      final email = user.email ?? '';
+      final isAdmin = await _repository.isAdmin(email).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => false,
+      );
+
+      if (isAdmin) {
+        state = AuthStatus.authenticatedAdmin;
+        return;
+      }
+
+      final hasProfile = await _repository.hasProfile(user.uid).timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => false,
+      );
+      if (!hasProfile) {
+        state = AuthStatus.profileIncomplete;
+      } else {
+        state = AuthStatus.authenticatedStudent;
+      }
+    } catch (e) {
       state = AuthStatus.unauthenticated;
-      return;
-    }
-
-    final email = user.email ?? '';
-    final isAdmin = await _repository.isAdmin(email);
-
-    if (isAdmin) {
-      state = AuthStatus.authenticatedAdmin;
-      return;
-    }
-
-    final hasProfile = await _repository.hasProfile(user.id);
-    if (!hasProfile) {
-      state = AuthStatus.profileIncomplete;
-    } else {
-      state = AuthStatus.authenticatedStudent;
     }
   }
 
-  Future<void> sendOtp(String email) async {
-    await _repository.signInWithEmail(email);
+  Future<void> signInWithEmailAndPassword(String email, String password) async {
+    await _repository.signInWithEmailAndPassword(email, password);
   }
 
-  Future<void> verifyOtp(String email, String otp) async {
-    await _repository.verifyOtp(email, otp);
+  Future<void> signUpWithEmailAndPassword(String email, String password) async {
+    await _repository.signUpWithEmailAndPassword(email, password);
+  }
+
+  Future<void> signInWithGoogle() async {
+    await _repository.signInWithGoogle();
   }
 
   Future<void> logout() async {
     await _repository.signOut();
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _repository.sendPasswordResetEmail(email);
   }
 }

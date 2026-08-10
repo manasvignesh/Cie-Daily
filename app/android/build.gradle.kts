@@ -16,7 +16,11 @@ rootProject.layout.buildDirectory.value(newBuildDir)
 subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
-    project.evaluationDependsOn(":app")
+
+    afterEvaluate {
+        val android = project.extensions.findByName("android") as? com.android.build.gradle.BaseExtension
+        android?.compileSdkVersion(36)
+    }
 
     tasks.withType<KotlinCompile>().configureEach {
         compilerOptions {

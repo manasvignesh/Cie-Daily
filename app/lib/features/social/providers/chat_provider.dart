@@ -1,13 +1,33 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../data/chat_repository.dart';
-import '../models/chat_models.dart';
 
-final inboxProvider = StreamProvider<List<ConversationModel>>((ref) {
-  final repo = ref.watch(chatRepositoryProvider);
-  return repo.streamConversations();
-});
+class ConversationItem {
+  final String id;
+  final String? name;
+  final String? lastMessageText;
+  final bool isGroup;
 
-final chatMessagesProvider = StreamProvider.family<List<MessageModel>, String>((ref, conversationId) {
-  final repo = ref.watch(chatRepositoryProvider);
-  return repo.streamMessages(conversationId);
+  ConversationItem({
+    required this.id,
+    this.name,
+    this.lastMessageText,
+    this.isGroup = false,
+  });
+}
+
+final inboxProvider = FutureProvider<List<ConversationItem>>((ref) async {
+  // Demo mock conversations
+  return [
+    ConversationItem(
+      id: '1',
+      name: 'MLRIT Innovation Club',
+      lastMessageText: 'Welcome to the CIE Connect platform!',
+      isGroup: true,
+    ),
+    ConversationItem(
+      id: '2',
+      name: 'Student Support',
+      lastMessageText: 'Let us know if you have any questions.',
+      isGroup: false,
+    ),
+  ];
 });

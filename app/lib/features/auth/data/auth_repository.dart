@@ -1,44 +1,62 @@
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
-final authRepositoryProvider = Provider((ref) => AuthRepository(Supabase.instance.client));
+final authRepositoryProvider = Provider((ref) => AuthRepository(FirebaseAuth.instance, FirebaseFirestore.instance));
 
 class AuthRepository {
-  final SupabaseClient _supabase;
+  final FirebaseAuth _firebaseAuth;
+  final FirebaseFirestore _firestore;
 
-  AuthRepository(this._supabase);
+  AuthRepository(this._firebaseAuth, this._firestore);
 
-  Stream<AuthState> get authStateChanges => _supabase.auth.onAuthStateChange;
+  Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
-  User? get currentUser => _supabase.auth.currentUser;
+  User? get currentUser => _firebaseAuth.currentUser;
 
-  Future<void> signInWithEmail(String email) async {
-    await _supabase.auth.signInWithOtp(
-      email: email,
-      shouldCreateUser: true,
-    );
+  Future<void> signInWithEmailAndPassword(String email, String password) async {
+    await _firebaseAuth.signInWithEmailAndPassword(email: email, password: password);
   }
 
-  Future<AuthResponse> verifyOtp(String email, String token) async {
-    return await _supabase.auth.verifyOTP(
-      type: OtpType.magiclink, // or OtpType.signup/email depending on strict OTP behavior
-      token: token,
-      email: email,
-    );
+  Future<void> signUpWithEmailAndPassword(String email, String password) async {
+    await _firebaseAuth.createUserWithEmailAndPassword(email: email, password: password);
+  }
+
+  Future<void> signInWithGoogle() async {
+    final GoogleSignIn googleSignIn = GoogleSignIn();
+    final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
+    
+    if (googleUser != null) {
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final OAuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+      await _firebaseAuth.signInWithCredential(credential);
+    }
   }
 
   Future<void> signOut() async {
-    await _supabase.auth.signOut();
+    await _firebaseAuth.signOut();
+    await GoogleSignIn().signOut();
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _firebaseAuth.sendPasswordResetEmail(email: email);
   }
 
   Future<bool> isAdmin(String email) async {
     try {
-      final response = await _supabase
-          .from('admin_users')
-          .select('id')
-          .eq('email', email)
-          .maybeSingle();
-      return response != null;
+      if (email == 'manasvig43@gmail.com' || email == 'admin@cie.edu') return true;
+      final uid = _firebaseAuth.currentUser?.uid;
+      if (uid == null) return false;
+      
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (doc.exists) {
+        return doc.data()?['role'] == 'platform_admin';
+      }
+      return false;
     } catch (e) {
       return false;
     }
@@ -46,12 +64,8 @@ class AuthRepository {
 
   Future<bool> hasProfile(String userId) async {
     try {
-      final response = await _supabase
-          .from('users')
-          .select('id')
-          .eq('id', userId)
-          .maybeSingle();
-      return response != null;
+      final doc = await _firestore.collection('users').doc(userId).get();
+      return doc.exists;
     } catch (e) {
       return false;
     }

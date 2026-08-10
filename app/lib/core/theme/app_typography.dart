@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'app_theme.dart';
 
 class AppTypography {
   static const String _fontFamily = 'Inter'; // Assuming Inter is the brand font

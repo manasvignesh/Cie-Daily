@@ -28,7 +28,7 @@ class PrimaryButton extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          disabledBackgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.5),
+          disabledBackgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
         ),
         child: isLoading
             ? const SizedBox(
