@@ -12,6 +12,7 @@ class PostModel {
   final String? authorAvatar;
   final String? imageUrl;
   final String? videoUrl;
+  final String? aspectRatio;
   final String? authorId;
   final List<String> likedBy;
   final List<String> bookmarkedBy;
@@ -35,6 +36,7 @@ class PostModel {
     this.authorAvatar,
     this.imageUrl,
     this.videoUrl,
+    this.aspectRatio,
     this.authorId,
     this.likedBy = const [],
     this.bookmarkedBy = const [],
@@ -59,6 +61,7 @@ class PostModel {
       authorAvatar: json['author']?['avatarUrl'] as String?,
       imageUrl: (json['mediaUrls'] as List<dynamic>?)?.isNotEmpty == true ? json['mediaUrls'][0] : json['imageUrl'] as String?,
       videoUrl: json['videoUrl'] as String?,
+      aspectRatio: json['aspectRatio'] as String?,
       authorId: json['authorId'] as String?,
       likedBy: List<String>.from(json['likedBy'] ?? []),
       bookmarkedBy: List<String>.from(json['bookmarkedBy'] ?? []),
@@ -92,6 +95,7 @@ class PostModel {
     String? authorAvatar,
     String? imageUrl,
     String? videoUrl,
+    String? aspectRatio,
     String? authorId,
     List<String>? likedBy,
     List<String>? bookmarkedBy,
@@ -112,6 +116,7 @@ class PostModel {
       authorAvatar: authorAvatar ?? this.authorAvatar,
       imageUrl: imageUrl ?? this.imageUrl,
       videoUrl: videoUrl ?? this.videoUrl,
+      aspectRatio: aspectRatio ?? this.aspectRatio,
       authorId: authorId ?? this.authorId,
       likedBy: likedBy ?? this.likedBy,
       bookmarkedBy: bookmarkedBy ?? this.bookmarkedBy,

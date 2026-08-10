@@ -70,6 +70,29 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
     super.dispose();
   }
 
+  String _selectedRatio = '9:16'; // Options: 9:16, 1:1, 4:5, 16:9
+
+  final List<Map<String, dynamic>> _ratioOptions = [
+    {'label': '9:16 Reel', 'value': '9:16', 'icon': Icons.stay_current_portrait},
+    {'label': '1:1 Square', 'value': '1:1', 'icon': Icons.crop_square},
+    {'label': '4:5 Portrait', 'value': '4:5', 'icon': Icons.crop_5_4},
+    {'label': '16:9 Wide', 'value': '16:9', 'icon': Icons.crop_16_9},
+  ];
+
+  double _getRatioValue(String ratioStr) {
+    switch (ratioStr) {
+      case '1:1':
+        return 1.0;
+      case '4:5':
+        return 4 / 5;
+      case '16:9':
+        return 16 / 9;
+      case '9:16':
+      default:
+        return 9 / 16;
+    }
+  }
+
   Future<void> _uploadAndPost() async {
     if (_selectedVideo == null) return;
     
@@ -94,12 +117,13 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
         createdAt: DateTime.now(),
         authorName: '', // Handled by repository
         videoUrl: videoUrl,
+        aspectRatio: _selectedRatio,
       );
       
       await ref.read(feedRepositoryProvider).createPost(post);
       
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reel posted successfully!')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post published successfully!')));
         context.pop();
       }
     } catch (e) {
@@ -159,11 +183,21 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
           : Stack(
               fit: StackFit.expand,
               children: [
-                if (_videoController != null && _videoController!.value.isInitialized)
-                  AspectRatio(
-                    aspectRatio: _videoController!.value.aspectRatio,
-                    child: VideoPlayer(_videoController!),
+                // Video Preview formatted according to selected ratio
+                Center(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(_selectedRatio == '9:16' ? 0 : 16),
+                    child: AspectRatio(
+                      aspectRatio: _getRatioValue(_selectedRatio),
+                      child: Container(
+                        color: Colors.black,
+                        child: _videoController != null && _videoController!.value.isInitialized
+                            ? VideoPlayer(_videoController!)
+                            : const SizedBox.shrink(),
+                      ),
+                    ),
                   ),
+                ),
                 Positioned(
                   top: 0,
                   left: 0,
@@ -178,15 +212,67 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
                       ),
                     ),
                     child: SafeArea(
-                      child: TextField(
-                        controller: _titleController,
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-                        decoration: const InputDecoration(
-                          hintText: 'Add a title to your reel...',
-                          hintStyle: TextStyle(color: Colors.white70),
-                          border: InputBorder.none,
-                        ),
-                        maxLength: 80,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextField(
+                            controller: _titleController,
+                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                            decoration: const InputDecoration(
+                              hintText: 'Add a title to your post...',
+                              hintStyle: TextStyle(color: Colors.white70),
+                              border: InputBorder.none,
+                            ),
+                            maxLength: 80,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Aspect Ratio:',
+                            style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                          const SizedBox(height: 8),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: _ratioOptions.map((opt) {
+                                final isSelected = _selectedRatio == opt['value'];
+                                return Padding(
+                                  padding: const EdgeInsets.only(right: 8.0),
+                                  child: FilterChip(
+                                    selected: isSelected,
+                                    showCheckmark: false,
+                                    avatar: Icon(
+                                      opt['icon'] as IconData,
+                                      size: 16,
+                                      color: isSelected ? Colors.black : Colors.white,
+                                    ),
+                                    label: Text(
+                                      opt['label'] as String,
+                                      style: TextStyle(
+                                        color: isSelected ? Colors.black : Colors.white,
+                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    backgroundColor: Colors.black54,
+                                    selectedColor: Colors.white,
+                                    side: BorderSide(
+                                      color: isSelected ? Colors.white : Colors.white24,
+                                    ),
+                                    onSelected: (val) {
+                                      if (val) {
+                                        setState(() {
+                                          _selectedRatio = opt['value'] as String;
+                                        });
+                                      }
+                                    },
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),

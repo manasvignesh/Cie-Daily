@@ -108,7 +108,78 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   child: FloatingActionButton(
                     mini: true,
                     onPressed: () {
-                      context.push('/create_video_post');
+                      showModalBottomSheet(
+                        context: context,
+                        backgroundColor: Colors.grey[900],
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        builder: (ctx) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Padding(
+                                padding: EdgeInsets.only(left: 8, bottom: 16),
+                                child: Text(
+                                  'Create Post',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              ListTile(
+                                leading: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.orange,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.video_collection, color: Colors.white),
+                                ),
+                                title: const Text(
+                                  'Video / Reel Post',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                ),
+                                subtitle: const Text(
+                                  'With Aspect Ratio choices (9:16, 1:1, 4:5, 16:9)',
+                                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                                ),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  context.push('/create_video_post');
+                                },
+                              ),
+                              const Divider(color: Colors.white12),
+                              ListTile(
+                                leading: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.blueAccent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.article_rounded, color: Colors.white),
+                                ),
+                                title: const Text(
+                                  'Article Post',
+                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                ),
+                                subtitle: const Text(
+                                  'Long-form articles and campus drops',
+                                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                                ),
+                                onTap: () {
+                                  Navigator.pop(ctx);
+                                  context.push('/create_article_post');
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
                     },
                     backgroundColor: Theme.of(context).colorScheme.primary,
                     child: const Icon(Icons.add),

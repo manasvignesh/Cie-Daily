@@ -222,6 +222,10 @@ class FirebaseFeedRepository implements FeedRepository {
       if (post.videoUrl != null) {
         postData['videoUrl'] = post.videoUrl!;
       }
+      
+      if (post.aspectRatio != null) {
+        postData['aspectRatio'] = post.aspectRatio!;
+      }
 
       await _firestore.collection('posts').add(postData);
     } catch (e) {

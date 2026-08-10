@@ -83,13 +83,31 @@ class _PostCardState extends State<PostCard> {
     widget.onBookmark(_isBookmarked);
   }
 
+  double? _parseAspectRatio(String? ratioStr) {
+    if (ratioStr == null) return null;
+    switch (ratioStr) {
+      case '1:1':
+        return 1.0;
+      case '4:5':
+        return 4 / 5;
+      case '16:9':
+        return 16 / 9;
+      case '9:16':
+        return 9 / 16;
+      default:
+        return null;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final post = widget.post;
-    // Generate a pseudo-random color based on the post ID for the gradient background
     final colorVal = post.id.hashCode;
     final color1 = Color((colorVal & 0xFFFFFF) | 0xFF000000).withOpacity(0.8);
     final color2 = Color(((colorVal >> 8) & 0xFFFFFF) | 0xFF000000).withOpacity(0.9);
+
+    final ratioDouble = _parseAspectRatio(post.aspectRatio);
+    final isFullScreen = ratioDouble == null || post.aspectRatio == '9:16';
 
     return GestureDetector(
       onDoubleTap: () {
@@ -101,8 +119,8 @@ class _PostCardState extends State<PostCard> {
         width: double.infinity,
         height: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.black, // fallback
-          image: _videoController == null && post.imageUrl != null
+          color: Colors.black,
+          image: isFullScreen && _videoController == null && post.imageUrl != null
               ? DecorationImage(
                   image: NetworkImage(post.imageUrl!),
                   fit: BoxFit.cover,
@@ -112,29 +130,56 @@ class _PostCardState extends State<PostCard> {
                   ),
                 )
               : null,
-          gradient: _videoController == null && post.imageUrl == null
-              ? LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [color1, color2],
-                )
-              : null,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [color1, color2],
+          ),
         ),
         child: Stack(
           children: [
+            // Media Layer
             if (_videoController != null && _videoController!.value.isInitialized)
-              Positioned.fill(
-                child: FittedBox(
-                  fit: BoxFit.cover,
-                  child: SizedBox(
-                    width: _videoController!.value.size.width,
-                    height: _videoController!.value.size.height,
-                    child: VideoPlayer(_videoController!),
+              isFullScreen
+                  ? Positioned.fill(
+                      child: FittedBox(
+                        fit: BoxFit.cover,
+                        child: SizedBox(
+                          width: _videoController!.value.size.width,
+                          height: _videoController!.value.size.height,
+                          child: VideoPlayer(_videoController!),
+                        ),
+                      ),
+                    )
+                  : Center(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: AspectRatio(
+                            aspectRatio: ratioDouble,
+                            child: VideoPlayer(_videoController!),
+                          ),
+                        ),
+                      ),
+                    ),
+            if (!isFullScreen && _videoController == null && post.imageUrl != null)
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: AspectRatio(
+                      aspectRatio: ratioDouble!,
+                      child: Image.network(
+                        post.imageUrl!,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
                   ),
                 ),
               ),
-            if (_videoController != null)
-              Container(color: Colors.black.withOpacity(0.3)), // Darken overlay for text
+            Container(color: Colors.black.withOpacity(0.25)), // Darken overlay for text
             SafeArea(
               child: Stack(
                 children: [
