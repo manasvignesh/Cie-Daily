@@ -166,6 +166,25 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
         ),
         child: Stack(
           children: [
+            // Ambient Blurred Background for non-fullscreen posts
+            if (!isFullScreen && post.imageUrl != null)
+              Positioned.fill(
+                child: ImageFiltered(
+                  imageFilter: ImageFilter.blur(sigmaX: 25, sigmaY: 25),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      image: DecorationImage(
+                        image: NetworkImage(post.imageUrl!),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.65),
+                    ),
+                  ),
+                ),
+              ),
+
             // Media Layer
             if (_videoController != null && _videoController!.value.isInitialized)
               isFullScreen
@@ -179,29 +198,59 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                         ),
                       ),
                     )
-                  : Center(
+                  : Positioned.fill(
                       child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: AspectRatio(
-                            aspectRatio: ratioDouble,
-                            child: VideoPlayer(_videoController!),
+                        padding: const EdgeInsets.only(top: 70, bottom: 220, left: 16, right: 76),
+                        child: Center(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.5),
+                                  blurRadius: 20,
+                                  spreadRadius: 2,
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(19),
+                              child: AspectRatio(
+                                aspectRatio: ratioDouble!,
+                                child: VideoPlayer(_videoController!),
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
             if (!isFullScreen && _videoController == null && post.imageUrl != null)
-              Center(
+              Positioned.fill(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: AspectRatio(
-                      aspectRatio: ratioDouble!,
-                      child: Image.network(
-                        post.imageUrl!,
-                        fit: BoxFit.cover,
+                  padding: const EdgeInsets.only(top: 70, bottom: 220, left: 16, right: 76),
+                  child: Center(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.5),
+                            blurRadius: 20,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(19),
+                        child: AspectRatio(
+                          aspectRatio: ratioDouble!,
+                          child: Image.network(
+                            post.imageUrl!,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
                       ),
                     ),
                   ),
@@ -213,17 +262,19 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
               bottom: 0,
               left: 0,
               right: 0,
-              height: 400,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.4),
-                      Colors.black.withOpacity(0.8),
-                    ],
+              height: 380,
+              child: IgnorePointer(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.4),
+                        Colors.black.withOpacity(0.85),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -267,7 +318,7 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                   
                   // Right Interaction Bar
                   Positioned(
-                    right: 16,
+                    right: 14,
                     bottom: 100,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -324,13 +375,19 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                       children: [
                         Row(
                           children: [
+                            AppAvatar(
+                              imageUrl: post.authorAvatar,
+                              radius: 14,
+                              fallbackText: post.authorName.isNotEmpty ? post.authorName[0].toUpperCase() : 'A',
+                            ),
+                            const SizedBox(width: 8),
                             Text(
                               post.authorName,
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                                shadows: [Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1))],
+                                fontSize: 15,
+                                shadows: [Shadow(color: Colors.black54, blurRadius: 4, offset: Offset(0, 1))],
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -342,15 +399,15 @@ class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 10),
                         Text(
                           post.title,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 24,
+                            fontSize: 22,
                             fontWeight: FontWeight.bold,
-                            height: 1.2,
-                            shadows: [Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1))],
+                            height: 1.25,
+                            shadows: [Shadow(color: Colors.black54, blurRadius: 6, offset: Offset(0, 2))],
                           ),
                         ),
                         const SizedBox(height: 8),
