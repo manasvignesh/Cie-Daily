@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -59,8 +59,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       );
     }
 
-    final displayName = user.displayName ?? 'Student';
-    final handle = '@${displayName.toLowerCase().replaceAll(' ', '_')}';
+    // Derive display name and handle robustly
+    final rawName = user.displayName ?? '';
+    final emailPrefix = (user.email ?? '').split('@').first;
+    final displayName = rawName.isNotEmpty ? rawName : (emailPrefix.isNotEmpty ? emailPrefix : 'Student');
+    final handle = '@${displayName.toLowerCase().replaceAll(' ', '_').replaceAll(RegExp(r'[^a-z0-9_]'), '')}';
     final photoUrl = user.photoURL;
     final email = user.email ?? '';
 
@@ -403,32 +406,79 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }
 
   Widget _buildGridCell(BuildContext context, PostModel post) {
+    final hasImage = post.imageUrl != null && post.imageUrl!.isNotEmpty;
+    final hasVideo = post.videoUrl != null && post.videoUrl!.isNotEmpty;
+    final hue = (post.id.hashCode % 360).abs().toDouble();
+
     return GestureDetector(
       onTap: () {},
-      child: Container(
-        decoration: BoxDecoration(color: const Color(0xFF111111)),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (post.imageUrl != null)
-              Image.network(post.imageUrl!, fit: BoxFit.cover)
-            else
-              Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Color(0xFF1C1C2E), Color(0xFF2C2C3E)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background
+          if (hasImage)
+            Image.network(
+              post.imageUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _buildGradientPlaceholder(hue),
+            )
+          else
+            _buildGradientPlaceholder(hue),
+
+          // Video indicator
+          if (hasVideo && !hasImage)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  shape: BoxShape.circle,
                 ),
-                child: const Center(child: Icon(Icons.article_rounded, color: Colors.white30, size: 32)),
+                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
               ),
-            if (post.videoUrl != null)
-              const Positioned(
-                top: 6, right: 6,
-                child: Icon(Icons.play_circle_filled_rounded, color: Colors.white, size: 20),
+            )
+          else if (hasVideo)
+            const Positioned(
+              top: 6, right: 6,
+              child: Icon(Icons.play_circle_filled_rounded, color: Colors.white, size: 22,
+                shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
+            ),
+
+          // Title overlay at bottom
+          Positioned(
+            bottom: 0, left: 0, right: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(6, 20, 6, 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                ),
               ),
+              child: Text(
+                post.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600, height: 1.2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGradientPlaceholder(double hue) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            HSLColor.fromAHSL(1, hue, 0.45, 0.22).toColor(),
+            HSLColor.fromAHSL(1, (hue + 40) % 360, 0.55, 0.14).toColor(),
           ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
       ),
     );

@@ -110,18 +110,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     onPressed: () {
                       showModalBottomSheet(
                         context: context,
-                        backgroundColor: Colors.grey[900],
+                        backgroundColor: const Color(0xFF1C1C1E),
+                        useSafeArea: true,
+                        isScrollControlled: true,
                         shape: const RoundedRectangleBorder(
                           borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
                         ),
                         builder: (ctx) => Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+                          padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // Handle bar
+                              Center(
+                                child: Container(
+                                  width: 36, height: 4,
+                                  margin: const EdgeInsets.only(bottom: 16),
+                                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                                ),
+                              ),
                               const Padding(
-                                padding: EdgeInsets.only(left: 8, bottom: 16),
+                                padding: EdgeInsets.only(left: 4, bottom: 16),
                                 child: Text(
                                   'Create Post',
                                   style: TextStyle(
@@ -132,6 +142,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ),
                               ),
                               ListTile(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                tileColor: Colors.white.withOpacity(0.06),
                                 leading: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: const BoxDecoration(
@@ -145,16 +157,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
                                 ),
                                 subtitle: const Text(
-                                  'With Aspect Ratio choices (9:16, 1:1, 4:5, 16:9)',
-                                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                                  'Supports 9:16 (Reels) and 4:5 formats',
+                                  style: TextStyle(color: Colors.white54, fontSize: 12),
                                 ),
                                 onTap: () {
                                   Navigator.pop(ctx);
                                   context.push('/create_video_post');
                                 },
                               ),
-                              const Divider(color: Colors.white12),
+                              const SizedBox(height: 10),
                               ListTile(
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                tileColor: Colors.white.withOpacity(0.06),
                                 leading: Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: const BoxDecoration(
@@ -169,7 +183,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ),
                                 subtitle: const Text(
                                   'Long-form articles and campus drops',
-                                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                                  style: TextStyle(color: Colors.white54, fontSize: 12),
                                 ),
                                 onTap: () {
                                   Navigator.pop(ctx);

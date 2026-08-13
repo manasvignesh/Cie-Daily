@@ -1,4 +1,4 @@
-﻿import 'dart:ui';
+import 'dart:ui';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -269,6 +269,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   // ──────────────────────────────────────────────────────────────────────────
   Widget _build45(BuildContext context) {
     final safeTop = MediaQuery.of(context).padding.top;
+    final safeBottom = MediaQuery.of(context).padding.bottom;
+    // Floating nav bar is ~64px pill + 16px bottom padding + 16px top padding = ~96px
+    const navBarHeight = 96.0;
+    final bottomOffset = safeBottom + navBarHeight;
 
     return Container(
       color: const Color(0xFF080808),
@@ -294,7 +298,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                     if (_videoController != null && _videoController!.value.isInitialized)
                       _buildVideoProgressBar(),
 
-                    // Bottom-of-video scrim + caption
+                    // Bottom-of-video scrim
                     Positioned(
                       bottom: 0, left: 0, right: 0, height: 160,
                       child: IgnorePointer(
@@ -329,10 +333,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 ),
               ),
 
-              // Bottom info section
+              // Bottom info section — padded so content stays above nav bar
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 68, 14),
+                  padding: EdgeInsets.fromLTRB(16, 14, 68, bottomOffset),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -342,8 +346,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       const SizedBox(height: 10),
                       // Caption snippet
                       if (widget.post.blocks.isNotEmpty) _buildCaptionSnippet(),
-                      const Spacer(),
-                      // Music ticker
+                      const SizedBox(height: 12),
+                      // Music ticker — always at fixed position, no Spacer pushing it down
                       _buildMusicTicker(),
                     ],
                   ),
@@ -352,10 +356,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
             ],
           ),
 
-          // Right action column pinned to right edge, vertically bottom of screen
+          // Right action column — pinned above nav bar
           Positioned(
             right: 10,
-            bottom: 14 + MediaQuery.of(context).padding.bottom,
+            bottom: bottomOffset,
             child: _buildActionColumn(context),
           ),
 
