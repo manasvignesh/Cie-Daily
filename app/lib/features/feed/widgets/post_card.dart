@@ -287,13 +287,19 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 ),
               ),
 
-              // Author info, title, caption, and music ticker positioned in space BELOW the 4:5 video frame
+              // Author info, title, caption, and music ticker aligned at the BOTTOM above nav bar
               Expanded(
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(16, 10, 68, bottomOffset),
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: _buildBottomInfo(context),
+                  padding: EdgeInsets.fromLTRB(16, 0, 68, bottomOffset),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: _buildBottomInfo(context),
+                      ),
+                    ],
                   ),
                 ),
               ),
