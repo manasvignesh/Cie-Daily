@@ -5,6 +5,16 @@ import '../../feed/models/post_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
+final userProfileProvider = StreamProvider.autoDispose<Map<String, dynamic>?>((ref) async* {
+  final user = await FirebaseAuth.instance.authStateChanges().firstWhere((u) => u != null);
+  
+  yield* FirebaseFirestore.instance
+      .collection('users')
+      .doc(user!.uid)
+      .snapshots()
+      .map((snap) => snap.data());
+});
+
 final bookmarkedPostsProvider = StreamProvider.autoDispose<List<PostModel>>((ref) async* {
   final user = await FirebaseAuth.instance.authStateChanges().firstWhere((u) => u != null);
   

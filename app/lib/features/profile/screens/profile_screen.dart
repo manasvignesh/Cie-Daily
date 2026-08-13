@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 import '../../feed/models/post_model.dart';
@@ -48,6 +49,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    final userProfileAsync = ref.watch(userProfileProvider);
     final userPostsAsync = ref.watch(userPostsProvider);
     final bookmarkedPostsAsync = ref.watch(bookmarkedPostsProvider);
     final screenSize = MediaQuery.of(context).size;
@@ -59,76 +61,126 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       );
     }
 
-    // Derive display name and handle robustly
-    final rawName = user.displayName ?? '';
-    final emailPrefix = (user.email ?? '').split('@').first;
-    final displayName = rawName.isNotEmpty ? rawName : (emailPrefix.isNotEmpty ? emailPrefix : 'Student');
-    final handle = '@${displayName.toLowerCase().replaceAll(' ', '_').replaceAll(RegExp(r'[^a-z0-9_]'), '')}';
-    final photoUrl = user.photoURL;
-    final email = user.email ?? '';
-    final postsCount = userPostsAsync.value?.length ?? 0;
+    return userProfileAsync.when(
+      data: (profileData) {
+        final rawName = profileData?['name'] as String? ?? user.displayName ?? '';
+        final emailPrefix = (user.email ?? '').split('@').first;
+        final displayName = rawName.isNotEmpty ? rawName : (emailPrefix.isNotEmpty ? emailPrefix : 'Student');
+        final handle = '@${displayName.toLowerCase().replaceAll(' ', '_').replaceAll(RegExp(r'[^a-z0-9_]'), '')}';
+        
+        final bio = profileData?['bio'] as String? ?? 'Sharing campus life, one drop at a time ✨';
+        final department = profileData?['department'] as String? ?? 'CS';
+        final yearOfStudy = profileData?['yearOfStudy']?.toString() ?? '1';
+        
+        final photoUrl = profileData?['photoUrl'] as String? ?? user.photoURL;
+        final email = user.email ?? '';
+        final postsCount = userPostsAsync.value?.length ?? 0;
+        
+        final List<dynamic> rawHighlights = profileData?['highlights'] as List<dynamic>? ?? [
+          {'label': 'Campus', 'color': '0xFFFF5A1F'},
+          {'label': 'Events', 'color': '0xFF5856D6'},
+          {'label': 'Sports', 'color': '0xFF34C759'},
+          {'label': 'Art', 'color': '0xFFFF2D55'},
+          {'label': 'Tech', 'color': '0xFF007AFF'},
+        ];
+        
+        final highlights = rawHighlights.map((h) => Map<String, dynamic>.from(h as Map)).toList();
 
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: SystemUiOverlayStyle.light,
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        extendBodyBehindAppBar: true,
-        appBar: _buildAppBar(context, displayName),
-        body: NestedScrollView(
-          headerSliverBuilder: (context, innerBoxIsScrolled) => [
-            SliverToBoxAdapter(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        return AnnotatedRegion<SystemUiOverlayStyle>(
+          value: SystemUiOverlayStyle.light,
+          child: Scaffold(
+            backgroundColor: Colors.black,
+            extendBodyBehindAppBar: true,
+            appBar: _buildAppBar(
+              context,
+              displayName: displayName,
+              bio: bio,
+              department: department,
+              yearOfStudy: yearOfStudy,
+              photoUrl: photoUrl,
+            ),
+            body: NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) => [
+                SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // ── BANNER + AVATAR ────────────────────────────────────
+                      _buildBannerSection(context, photoUrl, displayName, screenSize),
+
+                      // ── BIO SECTION ────────────────────────────────────────
+                      _buildBioSection(
+                        context,
+                        displayName: displayName,
+                        handle: handle,
+                        email: email,
+                        bio: bio,
+                        department: department,
+                        yearOfStudy: yearOfStudy,
+                      ),
+
+                      // ── STATS ROW ──────────────────────────────────────────
+                      _buildStatsRow(context, postsCount),
+
+                      // ── ACTION BUTTONS ─────────────────────────────────────
+                      _buildActionButtons(
+                        context,
+                        name: displayName,
+                        bio: bio,
+                        department: department,
+                        yearOfStudy: yearOfStudy,
+                        photoUrl: photoUrl,
+                        highlights: highlights,
+                      ),
+
+                      // ── HIGHLIGHTS ─────────────────────────────────────────
+                      _buildHighlights(context, highlights),
+
+                      const SizedBox(height: 4),
+                      const Divider(color: Color(0xFF222222), height: 1),
+                    ],
+                  ),
+                ),
+                // ── TABS ──────────────────────────────────────────────────────
+                SliverPersistentHeader(
+                  pinned: true,
+                  delegate: _TabBarDelegate(tabController: _tabController, gridView: _gridView, onToggleGrid: (v) => setState(() => _gridView = v)),
+                ),
+              ],
+              body: TabBarView(
+                controller: _tabController,
                 children: [
-                  // ── BANNER + AVATAR ────────────────────────────────────
-                  _buildBannerSection(context, photoUrl, displayName, screenSize),
-
-                  // ── BIO SECTION ────────────────────────────────────────
-                  _buildBioSection(context, displayName, handle, email),
-
-                  // ── STATS ROW ──────────────────────────────────────────
-                  _buildStatsRow(context, postsCount),
-
-                  // ── ACTION BUTTONS ─────────────────────────────────────
-                  _buildActionButtons(context),
-
-                  // ── HIGHLIGHTS ─────────────────────────────────────────
-                  _buildHighlights(context),
-
-                  const SizedBox(height: 4),
-                  const Divider(color: Color(0xFF222222), height: 1),
+                  // User's actual posts grid
+                  userPostsAsync.when(
+                    data: (posts) => _buildPostsGrid(context, posts),
+                    loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+                    error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                  ),
+                  // Saved Bookmarked Posts grid
+                  bookmarkedPostsAsync.when(
+                    data: (posts) => _buildPostsGrid(context, posts),
+                    loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+                    error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                  ),
                 ],
               ),
             ),
-            // ── TABS ──────────────────────────────────────────────────────
-            SliverPersistentHeader(
-              pinned: true,
-              delegate: _TabBarDelegate(tabController: _tabController, gridView: _gridView, onToggleGrid: (v) => setState(() => _gridView = v)),
-            ),
-          ],
-          body: TabBarView(
-            controller: _tabController,
-            children: [
-              // User's actual posts grid
-              userPostsAsync.when(
-                data: (posts) => _buildPostsGrid(context, posts),
-                loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-                error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
-              ),
-              // Saved Bookmarked Posts grid
-              bookmarkedPostsAsync.when(
-                data: (posts) => _buildPostsGrid(context, posts),
-                loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-                error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
-              ),
-            ],
           ),
-        ),
-      ),
+        );
+      },
+      loading: () => const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F)))),
+      error: (e, _) => Scaffold(backgroundColor: Colors.black, body: Center(child: Text('Error loading profile: $e', style: const TextStyle(color: Colors.white54)))),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context, String displayName) {
+  PreferredSizeWidget _buildAppBar(
+    BuildContext context, {
+    required String displayName,
+    required String bio,
+    required String department,
+    required String yearOfStudy,
+    required String? photoUrl,
+  }) {
     return AppBar(
       backgroundColor: Colors.transparent,
       elevation: 0,
@@ -146,7 +198,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         ),
         IconButton(
           icon: const Icon(Icons.menu_rounded, color: Colors.white, size: 26),
-          onPressed: () => _showSettingsSheet(context),
+          onPressed: () => _showSettingsSheet(
+            context,
+            name: displayName,
+            bio: bio,
+            department: department,
+            yearOfStudy: yearOfStudy,
+            photoUrl: photoUrl,
+          ),
         ),
       ],
     );
@@ -230,7 +289,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildBioSection(BuildContext context, String displayName, String handle, String email) {
+  Widget _buildBioSection(
+    BuildContext context, {
+    required String displayName,
+    required String handle,
+    required String email,
+    required String bio,
+    required String department,
+    required String yearOfStudy,
+  }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
       child: Column(
@@ -246,9 +313,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           const SizedBox(height: 3),
           Text(handle, style: const TextStyle(color: Color(0xFF888888), fontSize: 14, fontWeight: FontWeight.w400)),
           const SizedBox(height: 10),
-          const Text(
-            'Student · CIE Daily 📚\nSharing campus life, one drop at a time ✨',
-            style: TextStyle(color: Color(0xFFCCCCCC), fontSize: 13.5, height: 1.5),
+          Text(
+            'Year $yearOfStudy · $department Department 📚\n$bio',
+            style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13.5, height: 1.5),
           ),
           if (email.isNotEmpty) ...[
             const SizedBox(height: 6),
@@ -285,7 +352,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     return Container(width: 1, height: 30, color: const Color(0xFF2C2C2E));
   }
 
-  Widget _buildActionButtons(BuildContext context) {
+  Widget _buildActionButtons(
+    BuildContext context, {
+    required String name,
+    required String bio,
+    required String department,
+    required String yearOfStudy,
+    required String? photoUrl,
+    required List<Map<String, dynamic>> highlights,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
@@ -293,7 +368,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           Expanded(
             child: _ProfileActionBtn(
               label: 'Edit Profile',
-              onTap: () {},
+              onTap: () => _showEditProfileSheet(
+                context,
+                name: name,
+                bio: bio,
+                department: department,
+                yearOfStudy: yearOfStudy,
+                photoUrl: photoUrl,
+              ),
               filled: false,
             ),
           ),
@@ -301,7 +383,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           Expanded(
             child: _ProfileActionBtn(
               label: 'Share Profile',
-              onTap: () {},
+              onTap: () => _shareProfile(context, name),
               filled: false,
             ),
           ),
@@ -312,7 +394,177 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildHighlights(BuildContext context) {
+  void _shareProfile(BuildContext context, String displayName) {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+    
+    Clipboard.setData(ClipboardData(
+      text: 'Check out $displayName on CIE Connect! Email: ${user.email}'
+    ));
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Profile details copied to clipboard!'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  void _showEditProfileSheet(
+    BuildContext context, {
+    required String name,
+    required String bio,
+    required String department,
+    required String yearOfStudy,
+    required String? photoUrl,
+  }) {
+    final nameCtrl = TextEditingController(text: name);
+    final bioCtrl = TextEditingController(text: bio);
+    final deptCtrl = TextEditingController(text: department);
+    final yearCtrl = TextEditingController(text: yearOfStudy);
+    final photoCtrl = TextEditingController(text: photoUrl ?? '');
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      useSafeArea: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(16, 20, 16, MediaQuery.of(ctx).viewInsets.bottom + 24),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              ),
+              const Text('Edit Profile', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
+              const SizedBox(height: 20),
+              TextField(
+                controller: nameCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Full Name',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.06),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: bioCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Bio',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.06),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: deptCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Department',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.06),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: yearCtrl,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Year of Study (1-4)',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.06),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: photoCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Profile Photo URL',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.06),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () async {
+                  final n = nameCtrl.text.trim();
+                  final b = bioCtrl.text.trim();
+                  final d = deptCtrl.text.trim();
+                  final y = int.tryParse(yearCtrl.text.trim()) ?? 1;
+                  final p = photoCtrl.text.trim();
+
+                  if (n.isEmpty) return;
+
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user == null) return;
+
+                  Navigator.pop(ctx);
+
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+                  );
+
+                  try {
+                    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                      'name': n,
+                      'bio': b,
+                      'department': d,
+                      'yearOfStudy': y,
+                      'photoUrl': p.isNotEmpty ? p : null,
+                    });
+                    
+                    await user.updateDisplayName(n);
+                    if (p.isNotEmpty) {
+                      await user.updatePhotoURL(p);
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update: $e')));
+                    }
+                  } finally {
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF5A1F),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHighlights(BuildContext context, List<Map<String, dynamic>> highlights) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -325,11 +577,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _highlights.length + 1,
+            itemCount: highlights.length + 1,
             itemBuilder: (_, i) {
-              if (i == 0) return _buildAddHighlightBtn();
-              final h = _highlights[i - 1];
-              return _buildHighlightCircle(h['label'], h['color']);
+              if (i == 0) return _buildAddHighlightBtn(context, highlights);
+              final h = highlights[i - 1];
+              final colorHex = h['color'] as String? ?? '0xFFFF5A1F';
+              final color = Color(int.parse(colorHex));
+              return _buildHighlightCircle(h['label'] as String? ?? '', color);
             },
           ),
         ),
@@ -338,23 +592,140 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildAddHighlightBtn() {
+  Widget _buildAddHighlightBtn(BuildContext context, List<Map<String, dynamic>> currentHighlights) {
     return Padding(
       padding: const EdgeInsets.only(right: 16),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFF333333), width: 1.5),
+          GestureDetector(
+            onTap: () => _showAddHighlightSheet(context, currentHighlights),
+            child: Container(
+              width: 60, height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF333333), width: 1.5),
+              ),
+              child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
             ),
-            child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
           ),
           const SizedBox(height: 6),
           const Text('New', style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 11)),
         ],
+      ),
+    );
+  }
+
+  void _showAddHighlightSheet(BuildContext context, List<Map<String, dynamic>> currentHighlights) {
+    final labelCtrl = TextEditingController();
+    final colors = [
+      '0xFFFF5A1F',
+      '0xFF5856D6',
+      '0xFF34C759',
+      '0xFFFF2D55',
+      '0xFF007AFF',
+      '0xFFFFCC00',
+    ];
+    String selectedColor = colors.first;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      useSafeArea: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setStateSheet) => Padding(
+          padding: EdgeInsets.fromLTRB(16, 20, 16, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              ),
+              const Text('Create Highlight', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
+              const SizedBox(height: 20),
+              TextField(
+                controller: labelCtrl,
+                autofocus: true,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  hintText: 'Highlight Name (e.g. Projects)',
+                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.06),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 20),
+              const Text('Select Theme Color', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 48,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: colors.length,
+                  itemBuilder: (_, index) {
+                    final colorHex = colors[index];
+                    final color = Color(int.parse(colorHex));
+                    final isSelected = colorHex == selectedColor;
+                    return GestureDetector(
+                      onTap: () => setStateSheet(() => selectedColor = colorHex),
+                      child: Container(
+                        width: 38, height: 38,
+                        margin: const EdgeInsets.only(right: 12),
+                        decoration: BoxDecoration(
+                          color: color,
+                          shape: BoxShape.circle,
+                          border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
+                          boxShadow: isSelected ? [BoxShadow(color: color.withOpacity(0.6), blurRadius: 8, spreadRadius: 1)] : null,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () async {
+                  final label = labelCtrl.text.trim();
+                  if (label.isEmpty) return;
+
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user == null) return;
+
+                  Navigator.pop(ctx);
+
+                  final updatedHighlights = List<Map<String, dynamic>>.from(currentHighlights);
+                  updatedHighlights.add({
+                    'label': label,
+                    'color': selectedColor,
+                  });
+
+                  try {
+                    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                      'highlights': updatedHighlights,
+                    });
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to create: $e')));
+                    }
+                  }
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF5A1F),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Add Highlight', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -539,7 +910,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  void _showSettingsSheet(BuildContext context) {
+  void _showSettingsSheet(
+    BuildContext context, {
+    required String name,
+    required String bio,
+    required String department,
+    required String yearOfStudy,
+    required String? photoUrl,
+  }) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -556,7 +934,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                 child: Align(alignment: Alignment.centerLeft, child: Text('Settings', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700))),
               ),
-              _SettingsTile(icon: Icons.edit_rounded, label: 'Edit Profile', onTap: () => Navigator.pop(context)),
+              _SettingsTile(
+                icon: Icons.edit_rounded,
+                label: 'Edit Profile',
+                onTap: () {
+                  Navigator.pop(context);
+                  _showEditProfileSheet(context, name: name, bio: bio, department: department, yearOfStudy: yearOfStudy, photoUrl: photoUrl);
+                },
+              ),
               _SettingsTile(icon: Icons.notifications_none_rounded, label: 'Notifications', onTap: () => Navigator.pop(context)),
               _SettingsTile(icon: Icons.lock_outline_rounded, label: 'Privacy', onTap: () => Navigator.pop(context)),
               _SettingsTile(icon: Icons.help_outline_rounded, label: 'Help & Support', onTap: () => Navigator.pop(context)),
