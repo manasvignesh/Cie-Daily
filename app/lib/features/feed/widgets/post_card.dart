@@ -255,6 +255,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   }
 
   Widget _build45(BuildContext context) {
+    final safeTop = MediaQuery.of(context).padding.top;
     final safeBottom = MediaQuery.of(context).padding.bottom;
     const navBarHeight = 96.0;
     final bottomOffset = safeBottom + navBarHeight;
@@ -264,59 +265,46 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Centered 4:5 Media
-          Center(
-            child: AspectRatio(
-              aspectRatio: 4 / 5,
-              child: _buildMedia(fit: BoxFit.cover),
-            ),
-          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Top status bar space
+              SizedBox(height: safeTop),
 
-          // Video progress bar centered directly below the 4:5 aspect ratio frame
-          if (_videoController != null && _videoController!.value.isInitialized)
-            Center(
-              child: AspectRatio(
+              // 4:5 Media Container aligned at top
+              AspectRatio(
                 aspectRatio: 4 / 5,
                 child: Stack(
+                  fit: StackFit.expand,
                   children: [
-                    Positioned(
-                      bottom: 0, left: 0, right: 0,
-                      child: _buildVideoProgressBar(),
-                    ),
+                    _buildMedia(fit: BoxFit.cover),
+                    if (_videoController != null && _videoController!.value.isInitialized)
+                      Positioned(
+                        bottom: 0, left: 0, right: 0,
+                        child: _buildVideoProgressBar(),
+                      ),
                   ],
                 ),
               ),
-            ),
 
-          // Bottom scrim gradient
-          Positioned(
-            bottom: 0, left: 0, right: 0, height: 320,
-            child: IgnorePointer(
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+              // Author info, title, caption, and music ticker positioned in space BELOW the 4:5 video frame
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.fromLTRB(16, 10, 68, bottomOffset),
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: _buildBottomInfo(context),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
 
-          // Right action column — identical layout height
+          // Right action column pinned on the right
           Positioned(
             right: 10,
             bottom: bottomOffset + 12,
             child: _buildActionColumn(context),
-          ),
-
-          // Bottom info overlay — identical layout height
-          Positioned(
-            left: 16,
-            right: 68,
-            bottom: bottomOffset + 12,
-            child: _buildBottomInfo(context),
           ),
 
           // Heart burst animation
