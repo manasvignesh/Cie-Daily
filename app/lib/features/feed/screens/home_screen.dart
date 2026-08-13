@@ -182,7 +182,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       );
                     },
                     backgroundColor: Theme.of(context).colorScheme.primary,
-                    child: const Icon(Icons.add),
+                    foregroundColor: Colors.white,
+                    elevation: 8,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: Colors.white.withOpacity(0.2), width: 1),
+                    ),
+                    child: const Icon(Icons.add, size: 28),
                   ),
                 ),
               ),

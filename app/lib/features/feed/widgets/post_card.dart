@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../models/post_model.dart';
@@ -25,11 +26,16 @@ class PostCard extends StatefulWidget {
   State<PostCard> createState() => _PostCardState();
 }
 
-class _PostCardState extends State<PostCard> {
+class _PostCardState extends State<PostCard> with SingleTickerProviderStateMixin {
   bool _isLiked = false;
   bool _isBookmarked = false;
   late int _likesCount;
   VideoPlayerController? _videoController;
+
+  // Animation controllers for double-tap heart
+  bool _showHeartAnimation = false;
+  late AnimationController _heartAnimController;
+  late Animation<double> _heartScaleAnim;
 
   @override
   void initState() {
@@ -38,18 +44,30 @@ class _PostCardState extends State<PostCard> {
     _isLiked = widget.post.isLikedByCurrentUser;
     _isBookmarked = widget.post.isBookmarkedByCurrentUser;
 
+    _heartAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _heartScaleAnim = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.2).chain(CurveTween(curve: Curves.easeOutCubic)), weight: 50),
+      TweenSequenceItem(tween: Tween(begin: 1.2, end: 1.0).chain(CurveTween(curve: Curves.elasticOut)), weight: 50),
+    ]).animate(_heartAnimController);
+
     if (widget.post.videoUrl != null) {
       _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.post.videoUrl!))
         ..initialize().then((_) {
-          setState(() {});
-          _videoController?.setLooping(true);
-          _videoController?.play();
+          if (mounted) {
+            setState(() {});
+            _videoController?.setLooping(true);
+            _videoController?.play();
+          }
         });
     }
   }
 
   @override
   void dispose() {
+    _heartAnimController.dispose();
     _videoController?.dispose();
     super.dispose();
   }
@@ -74,6 +92,24 @@ class _PostCardState extends State<PostCard> {
       _likesCount += _isLiked ? 1 : -1;
     });
     widget.onLike(_isLiked);
+  }
+
+  void _triggerDoubleTapHeart() {
+    if (!_isLiked) {
+      _handleLike();
+    }
+    setState(() {
+      _showHeartAnimation = true;
+    });
+    _heartAnimController.forward(from: 0.0).then((_) {
+      Future.delayed(const Duration(milliseconds: 300), () {
+        if (mounted) {
+          setState(() {
+            _showHeartAnimation = false;
+          });
+        }
+      });
+    });
   }
 
   void _handleBookmark() {
@@ -110,11 +146,7 @@ class _PostCardState extends State<PostCard> {
     final isFullScreen = ratioDouble == null || post.aspectRatio == '9:16';
 
     return GestureDetector(
-      onDoubleTap: () {
-        if (!_isLiked) {
-          _handleLike();
-        }
-      },
+      onDoubleTap: _triggerDoubleTapHeart,
       child: Container(
         width: double.infinity,
         height: double.infinity,
@@ -124,10 +156,6 @@ class _PostCardState extends State<PostCard> {
               ? DecorationImage(
                   image: NetworkImage(post.imageUrl!),
                   fit: BoxFit.cover,
-                  colorFilter: ColorFilter.mode(
-                    Colors.black.withOpacity(0.4),
-                    BlendMode.darken,
-                  ),
                 )
               : null,
           gradient: LinearGradient(
@@ -179,163 +207,237 @@ class _PostCardState extends State<PostCard> {
                   ),
                 ),
               ),
-            Container(color: Colors.black.withOpacity(0.25)), // Darken overlay for text
+            
+            // Modern Smooth Gradient Overlay for text readability
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 400,
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withOpacity(0.4),
+                      Colors.black.withOpacity(0.8),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            
+            // Double Tap Massive Heart Animation
+            if (_showHeartAnimation)
+              Center(
+                child: ScaleTransition(
+                  scale: _heartScaleAnim,
+                  child: Icon(
+                    Icons.favorite_rounded,
+                    color: Colors.white.withOpacity(0.9),
+                    size: 120,
+                  ),
+                ),
+              ),
+
             SafeArea(
               child: Stack(
                 children: [
                   // Top Tags
                   Positioned(
-              top: 24,
-              left: 20,
-              child: Row(
-                children: [
-                  if (post.isTodaysDrop)
-                    const AppTag(
-                      text: "TODAY'S DROP",
-                      color: Color(0xFFFF5A1F),
-                      textColor: Colors.white,
-                    )
-                  else
-                    AppTag(
-                      text: post.category,
-                      color: Colors.white.withOpacity(0.2),
-                      textColor: Colors.white,
+                    top: 24,
+                    left: 20,
+                    child: Row(
+                      children: [
+                        if (post.isTodaysDrop)
+                          _buildGlassTag(
+                            text: "TODAY'S DROP",
+                            color: const Color(0xFFFF5A1F).withOpacity(0.8),
+                          )
+                        else
+                          _buildGlassTag(
+                            text: post.category,
+                            color: Colors.white.withOpacity(0.2),
+                          ),
+                      ],
                     ),
-                ],
-              ),
-            ),
-            
-            // Right Interaction Bar
-            Positioned(
-              right: 16,
-              bottom: 100,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  _buildInteractionButton(
-                    context,
-                    icon: _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                    iconColor: _isLiked ? Colors.redAccent : Colors.white,
-                    label: _likesCount.toString(),
-                    onTap: _handleLike,
                   ),
-                  const SizedBox(height: 16),
-                  _buildInteractionButton(
-                    context,
-                    icon: Icons.chat_bubble_outline_rounded,
-                    label: post.commentCount.toString(),
-                    onTap: widget.onComment,
+                  
+                  // Right Interaction Bar
+                  Positioned(
+                    right: 16,
+                    bottom: 100,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        _buildInteractionButton(
+                          context,
+                          icon: _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          iconColor: _isLiked ? Colors.redAccent : Colors.white,
+                          label: _likesCount.toString(),
+                          onTap: _handleLike,
+                          isAnimatedIcon: true,
+                          isActive: _isLiked,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildInteractionButton(
+                          context,
+                          icon: Icons.chat_bubble_outline_rounded,
+                          label: post.commentCount.toString(),
+                          onTap: widget.onComment,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildInteractionButton(
+                          context,
+                          icon: _isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+                          iconColor: _isBookmarked ? Theme.of(context).primaryColor : Colors.white,
+                          label: 'Save',
+                          onTap: _handleBookmark,
+                          isAnimatedIcon: true,
+                          isActive: _isBookmarked,
+                        ),
+                        const SizedBox(height: 16),
+                        _buildInteractionButton(
+                          context,
+                          icon: Icons.ios_share_rounded,
+                          label: 'Share',
+                          onTap: () {
+                            widget.onShare();
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Sharing this post...')),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 16),
-                  _buildInteractionButton(
-                    context,
-                    icon: _isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-                    iconColor: _isBookmarked ? Theme.of(context).primaryColor : Colors.white,
-                    label: 'Save',
-                    onTap: _handleBookmark,
-                  ),
-                  const SizedBox(height: 16),
-                  _buildInteractionButton(
-                    context,
-                    icon: Icons.ios_share_rounded,
-                    label: 'Share',
-                    onTap: () {
-                      widget.onShare();
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Sharing this post...')),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
 
-            // Bottom Content
-            Positioned(
-              left: 20,
-              right: 80, // Leave space for interaction bar
-              bottom: 100,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        post.authorName,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                  // Bottom Content
+                  Positioned(
+                    left: 20,
+                    right: 80, // Leave space for interaction bar
+                    bottom: 100,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              post.authorName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                shadows: [Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1))],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _buildGlassTag(
+                              text: '${post.estimatedReadTime} min read',
+                              color: Colors.white.withOpacity(0.15),
+                              fontSize: 10,
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            ),
+                          ],
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '${post.estimatedReadTime} min read',
+                        const SizedBox(height: 12),
+                        Text(
+                          post.title,
                           style: const TextStyle(
                             color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            height: 1.2,
+                            shadows: [Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1))],
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    post.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                      height: 1.2,
+                        const SizedBox(height: 8),
+                        if (post.blocks.isNotEmpty)
+                          _buildTextSnippet(context, post.blocks.first),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  if (post.blocks.isNotEmpty)
-                    _buildTextSnippet(context, post.blocks.first),
                 ],
               ),
             ),
-          ],
-        ),
-      ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInteractionButton(BuildContext context, {required IconData icon, required String label, required VoidCallback onTap, Color iconColor = Colors.white}) {
+  Widget _buildGlassTag({required String text, required Color color, double fontSize = 12, EdgeInsets padding = const EdgeInsets.symmetric(horizontal: 12, vertical: 6)}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withOpacity(0.2), width: 0.5),
+          ),
+          child: Text(
+            text,
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: fontSize,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.5,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInteractionButton(BuildContext context, {
+    required IconData icon, 
+    required String label, 
+    required VoidCallback onTap, 
+    Color iconColor = Colors.white,
+    bool isAnimatedIcon = false,
+    bool isActive = false,
+  }) {
     return Column(
       children: [
         InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(24),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.4),
-              shape: BoxShape.circle,
+          borderRadius: BorderRadius.circular(28),
+          child: ClipOval(
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 8.0, sigmaY: 8.0),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
+                ),
+                child: isAnimatedIcon
+                    ? AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                        child: Icon(icon, key: ValueKey(isActive), color: iconColor, size: 28),
+                      )
+                    : Icon(icon, color: iconColor, size: 28),
+              ),
             ),
-            child: Icon(icon, color: iconColor, size: 28),
           ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 6),
         Text(
           label,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
             shadows: [
               Shadow(
-                color: Colors.black54,
+                color: Colors.black87,
                 blurRadius: 4,
                 offset: Offset(0, 1),
               ),
@@ -357,9 +459,10 @@ class _PostCardState extends State<PostCard> {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
-            color: Colors.white.withOpacity(0.8),
+            color: Colors.white.withOpacity(0.9),
             fontSize: 14,
             height: 1.4,
+            shadows: const [Shadow(color: Colors.black45, blurRadius: 4, offset: Offset(0, 1))],
           ),
         );
       }
@@ -367,3 +470,4 @@ class _PostCardState extends State<PostCard> {
     return const SizedBox.shrink();
   }
 }
+

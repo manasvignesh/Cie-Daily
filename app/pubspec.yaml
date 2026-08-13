@@ -49,6 +49,7 @@ dependencies:
   flutter_dotenv: ^5.1.0
   shared_preferences: ^2.2.3
   dart_jsonwebtoken: ^3.4.1
+  google_fonts: ^8.2.1
 
 dev_dependencies:
   flutter_test:
