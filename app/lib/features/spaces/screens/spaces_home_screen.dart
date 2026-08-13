@@ -133,6 +133,9 @@ class SpacesHomeScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final liveStreamsAsync = ref.watch(liveStreamsProvider);
 
+    final user = FirebaseAuth.instance.currentUser;
+    final isMlritAdmin = user?.email?.endsWith('@mlrit.ac.in') ?? false;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -168,19 +171,21 @@ class SpacesHomeScreen extends ConsumerWidget {
           ),
         ),
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 90.0), // Padding to clear bottom navigation bar
-        child: FloatingActionButton.extended(
-          onPressed: () => _showCreateSpaceSheet(context, ref),
-          backgroundColor: AppTheme.primaryOrange,
-          foregroundColor: Colors.white,
-          icon: const Icon(Icons.sensors_rounded),
-          label: const Text(
-            'Go Live',
-            style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
-          ),
-        ),
-      ),
+      floatingActionButton: isMlritAdmin
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: 90.0), // Padding to clear bottom navigation bar
+              child: FloatingActionButton.extended(
+                onPressed: () => _showCreateSpaceSheet(context, ref),
+                backgroundColor: AppTheme.primaryOrange,
+                foregroundColor: Colors.white,
+                icon: const Icon(Icons.sensors_rounded),
+                label: const Text(
+                  'Go Live',
+                  style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                ),
+              ),
+            )
+          : null,
     );
   }
 

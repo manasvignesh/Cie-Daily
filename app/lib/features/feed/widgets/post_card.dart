@@ -248,12 +248,12 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 ),
                 // Right actions
                 Positioned(
-                  right: 10, bottom: 90,
+                  right: 10, bottom: 120,
                   child: _buildActionColumn(context),
                 ),
                 // Bottom info
                 Positioned(
-                  left: 16, right: 68, bottom: 32,
+                  left: 16, right: 68, bottom: 64,
                   child: _buildBottomInfo(context),
                 ),
               ],
@@ -376,74 +376,77 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
   Widget _buildAuthorRow(BuildContext context, {required bool topBar}) {
     final post = widget.post;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        // Story-ring avatar
-        _StoryRingAvatar(imageUrl: post.authorAvatar, fallback: post.authorName.isNotEmpty ? post.authorName[0] : 'A', radius: topBar ? 18 : 17),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      post.authorName,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // Story-ring avatar
+          _StoryRingAvatar(imageUrl: post.authorAvatar, fallback: post.authorName.isNotEmpty ? post.authorName[0] : 'A', radius: topBar ? 18 : 17),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        post.authorName,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+                        ),
                       ),
                     ),
-                  ),
-                  if (topBar) ...[
-                    const SizedBox(width: 6),
-                    Text(
-                      '• ${_timeAgo(post.createdAt)}',
-                      style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12, shadows: const [Shadow(color: Colors.black, blurRadius: 4)]),
-                    ),
+                    if (topBar) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '• ${_timeAgo(post.createdAt)}',
+                        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12, shadows: const [Shadow(color: Colors.black, blurRadius: 4)]),
+                      ),
+                    ],
                   ],
-                ],
-              ),
-              if (!topBar)
-                Text(
-                  _timeAgo(post.createdAt),
-                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
                 ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 10),
-        // Follow button
-        GestureDetector(
-          onTap: () => setState(() => _isFollowing = !_isFollowing),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 220),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-            decoration: BoxDecoration(
-              color: _isFollowing ? Colors.white.withOpacity(0.12) : Colors.transparent,
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(
-                color: _isFollowing ? Colors.white.withOpacity(0.4) : Colors.white.withOpacity(0.9),
-                width: 1.2,
-              ),
-            ),
-            child: Text(
-              _isFollowing ? 'Following' : 'Follow',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: _isFollowing ? FontWeight.w500 : FontWeight.w700,
-              ),
+                if (!topBar)
+                  Text(
+                    _timeAgo(post.createdAt),
+                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                  ),
+              ],
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 10),
+          // Follow button
+          GestureDetector(
+            onTap: () => setState(() => _isFollowing = !_isFollowing),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+              decoration: BoxDecoration(
+                color: _isFollowing ? Colors.white.withOpacity(0.12) : Colors.transparent,
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: _isFollowing ? Colors.white.withOpacity(0.4) : Colors.white.withOpacity(0.9),
+                  width: 1.2,
+                ),
+              ),
+              child: Text(
+                _isFollowing ? 'Following' : 'Follow',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: _isFollowing ? FontWeight.w500 : FontWeight.w700,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

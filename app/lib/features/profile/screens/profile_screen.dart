@@ -19,10 +19,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   late TabController _tabController;
   bool _gridView = true;
 
-  // Mock stats — will be replaced by real data in future
-  final int _postsCount = 0;
-  final int _followersCount = 1240;
-  final int _followingCount = 318;
+  // Dynamic stats
+  final int _followersCount = 0;
+  final int _followingCount = 0;
 
   // Mock highlights
   final List<Map<String, dynamic>> _highlights = [
