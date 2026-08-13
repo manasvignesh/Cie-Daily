@@ -35,16 +35,36 @@ class ChatRepository {
         .limit(1)
         .get();
 
-    if (userQuery.docs.isEmpty) {
-      throw Exception('Invalid Connection Code. Please verify and try again.');
-    }
+    DocumentSnapshot<Map<String, dynamic>> targetDoc;
+    if (userQuery.docs.isNotEmpty) {
+      targetDoc = userQuery.docs.first;
+    } else {
+      // Smart Fallback: match by name or email prefix if target student doc lacks connectionCode
+      final prefix = cleanCode.split('-').first.trim().toUpperCase();
+      final allUsers = await _firestore.collection('users').get();
+      final matches = allUsers.docs.where((doc) {
+        if (doc.id == user.uid) return false;
+        final d = doc.data();
+        final name = (d['name'] as String? ?? '').trim().toUpperCase();
+        final email = (d['email'] as String? ?? '').trim().toUpperCase();
+        return (prefix.length >= 3 && (name.startsWith(prefix) || email.startsWith(prefix)));
+      }).toList();
 
-    final targetDoc = userQuery.docs.first;
+      if (matches.isEmpty) {
+        throw Exception('Student code "$cleanCode" not found. Please verify the code and try again.');
+      }
+      targetDoc = matches.first;
+      // Auto-populate target doc with this connection code
+      await _firestore.collection('users').doc(targetDoc.id).set(
+        {'connectionCode': cleanCode},
+        SetOptions(merge: true),
+      );
+    }
     final targetUid = targetDoc.id;
     final targetData = targetDoc.data();
-    final targetName = targetData['name'] as String? ?? 'Student';
-    final targetAutoAccept = targetData['autoAcceptRequests'] as bool? ?? false;
-    final targetBlocked = List<String>.from(targetData['blockedUserIds'] ?? []);
+    final targetName = targetData?['name'] as String? ?? 'Student';
+    final targetAutoAccept = targetData?['autoAcceptRequests'] as bool? ?? false;
+    final targetBlocked = List<String>.from(targetData?['blockedUserIds'] ?? []);
 
     if (targetUid == user.uid) {
       throw Exception('You cannot connect with yourself.');
@@ -100,7 +120,7 @@ class ChatRepository {
         userAName: myName,
         userAPhoto: myPhoto,
         userBName: targetName,
-        userBPhoto: targetData['photoUrl'] as String?,
+        userBPhoto: targetData?['photoUrl'] as String?,
       );
 
       return 'Connected automatically with $targetName!';
