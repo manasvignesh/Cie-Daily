@@ -17,6 +17,8 @@ import '../../features/discover/screens/article_detail_screen.dart';
 import '../../features/feed/models/post_model.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
+import '../../features/chat/screens/chat_list_screen.dart';
+import '../../features/chat/screens/individual_chat_screen.dart';
 import '../widgets/navigation/app_bottom_nav.dart';
 
 import '../../features/admin/widgets/admin_bottom_nav.dart';
@@ -77,6 +79,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/create_article_post',
         builder: (context, state) => const CreateArticlePostScreen(),
+      ),
+      GoRoute(
+        path: '/chat/:conversationId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final conversationId = state.pathParameters['conversationId']!;
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return IndividualChatScreen(
+            conversationId: conversationId,
+            partnerUid: extra['partnerUid'] ?? '',
+            partnerName: extra['partnerName'] ?? 'Student',
+            partnerPhoto: extra['partnerPhoto'],
+          );
+        },
       ),
       GoRoute(
         path: '/spaces/:spaceId',
@@ -144,7 +160,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           if (state.matchedLocation.startsWith('/home')) index = 0;
           if (state.matchedLocation.startsWith('/discover')) index = 1;
           if (state.matchedLocation.startsWith('/spaces')) index = 2;
-          if (state.matchedLocation.startsWith('/profile')) index = 3;
+          if (state.matchedLocation.startsWith('/chat')) index = 3;
+          if (state.matchedLocation.startsWith('/profile')) index = 4;
 
           return Scaffold(
             extendBody: true,
@@ -163,6 +180,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                     context.go('/spaces');
                     break;
                   case 3:
+                    context.go('/chat');
+                    break;
+                  case 4:
                     context.go('/profile');
                     break;
                 }
@@ -191,6 +211,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: '/spaces',
             builder: (context, state) => const SpacesHomeScreen(),
+          ),
+          GoRoute(
+            path: '/chat',
+            builder: (context, state) => const ChatListScreen(),
           ),
           GoRoute(
             path: '/profile',

@@ -117,6 +117,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         bio: bio,
                         department: department,
                         yearOfStudy: yearOfStudy,
+                        connectionCode: profileData?['connectionCode'] as String? ?? '',
                       ),
 
                       // ── STATS ROW ──────────────────────────────────────────
@@ -297,6 +298,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required String bio,
     required String department,
     required String yearOfStudy,
+    required String connectionCode,
   }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -325,6 +327,38 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 const SizedBox(width: 5),
                 Text(email, style: const TextStyle(color: Color(0xFF888888), fontSize: 12.5)),
               ],
+            ),
+          ],
+          if (connectionCode.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            GestureDetector(
+              onTap: () {
+                Clipboard.setData(ClipboardData(text: connectionCode));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Connection code copied to clipboard!'), duration: Duration(seconds: 2)),
+                );
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF5A1F).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFFF5A1F).withOpacity(0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.qr_code_rounded, color: Color(0xFFFF5A1F), size: 16),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Connection Code: $connectionCode',
+                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
+                    ),
+                    const SizedBox(width: 8),
+                    const Icon(Icons.copy_rounded, color: Colors.white70, size: 14),
+                  ],
+                ),
+              ),
             ),
           ],
         ],
@@ -940,6 +974,25 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               ),
               _SettingsTile(icon: Icons.notifications_none_rounded, label: 'Notifications', onTap: () => Navigator.pop(context)),
               _SettingsTile(icon: Icons.lock_outline_rounded, label: 'Privacy', onTap: () => Navigator.pop(context)),
+              Consumer(
+                builder: (ctx, ref, _) {
+                  final userProfile = ref.watch(userProfileProvider).value;
+                  final autoAccept = userProfile?['autoAcceptRequests'] as bool? ?? false;
+                  return SwitchListTile(
+                    secondary: const Icon(Icons.handshake_outlined, color: Colors.white),
+                    title: const Text('Auto-Accept Connection Requests', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                    subtitle: Text(autoAccept ? 'Automatically accept incoming requests' : 'Manually review incoming requests', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    value: autoAccept,
+                    activeColor: const Color(0xFFFF5A1F),
+                    onChanged: (val) async {
+                      final uid = FirebaseAuth.instance.currentUser?.uid;
+                      if (uid != null) {
+                        await FirebaseFirestore.instance.collection('users').doc(uid).update({'autoAcceptRequests': val});
+                      }
+                    },
+                  );
+                },
+              ),
               _SettingsTile(icon: Icons.help_outline_rounded, label: 'Help & Support', onTap: () => Navigator.pop(context)),
               const Divider(color: Color(0xFF2C2C2E), height: 1),
               _SettingsTile(
