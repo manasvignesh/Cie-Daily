@@ -292,7 +292,7 @@ class _PulsingLiveBadgeState extends State<_PulsingLiveBadge> with SingleTickerP
               decoration: const BoxDecoration(
                 color: Colors.redAccent,
                 shape: BoxShape.circle,
-                shadows: [
+                boxShadow: [
                   BoxShadow(
                     color: Colors.redAccent,
                     blurRadius: 6,
