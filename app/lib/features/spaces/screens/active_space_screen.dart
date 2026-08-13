@@ -359,8 +359,8 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
 
         // Chat side panel (toggleable)
         if (_showChat)
-          SizedBox(
-            width: 280,
+          Expanded(
+            flex: 3,
             child: _buildChatPanel(),
           ),
       ],

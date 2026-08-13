@@ -53,8 +53,13 @@ class AddCommentService {
     });
 
     // Optionally increment comment count on post
-    await FirebaseFirestore.instance.collection('posts').doc(postId).update({
-      'commentsCount': FieldValue.increment(1),
-    });
+    // Wrapped in try-catch because Firestore rules might deny users from updating posts they don't own.
+    try {
+      await FirebaseFirestore.instance.collection('posts').doc(postId).update({
+        'commentsCount': FieldValue.increment(1),
+      });
+    } catch (e) {
+      print('Could not update commentsCount: $e');
+    }
   }
 }
