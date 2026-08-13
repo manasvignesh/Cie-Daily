@@ -1,9 +1,11 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:livekit_client/livekit_client.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart' show RTCVideoViewObjectFit;
+import '../../../core/theme/app_theme.dart';
 import '../providers/livekit_provider.dart';
 import '../services/livekit_token_service.dart';
 import '../../../features/auth/providers/auth_provider.dart';
@@ -192,13 +194,17 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                             style: TextStyle(color: Colors.white70)))),
           ),
 
-          // Thumbnails row at top
+          // Top Header Bar
+          if (_showControls)
+            _buildTopBar(context, participants.length),
+
+          // Thumbnails row at top (below top bar)
           if (participants.length > 1)
             Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              left: 8,
-              right: 8,
-              height: 80,
+              top: MediaQuery.of(context).padding.top + 64,
+              left: 12,
+              right: 12,
+              height: 90,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 itemCount: participants.length,
@@ -209,8 +215,8 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                     onTap: () =>
                         setState(() => _pinnedParticipant = p),
                     child: Container(
-                      width: 100,
-                      margin: const EdgeInsets.only(right: 8),
+                      width: 110,
+                      margin: const EdgeInsets.only(right: 10),
                       child: _ThumbnailWidget(participant: p),
                     ),
                   );
@@ -221,20 +227,116 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
           // Bottom overlay: chat + controls
           if (_showControls)
             Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
+              bottom: 16,
+              left: 16,
+              right: 16,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   // Chat messages overlay
-                  if (_showChat) _buildChatOverlay(height: 200),
+                  if (_showChat) _buildChatOverlay(height: 220),
+                  if (_showChat) const SizedBox(height: 10),
                   // Chat input + controls bar
                   _buildBottomBar(isMuted),
                 ],
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTopBar(BuildContext context, int participantCount) {
+    return Positioned(
+      top: MediaQuery.of(context).padding.top + 8,
+      left: 16,
+      right: 16,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.4),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.redAccent.withOpacity(0.4), width: 0.5),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.circle, color: Colors.redAccent, size: 8),
+                      SizedBox(width: 6),
+                      Text(
+                        'LIVE',
+                        style: TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.roomName ?? 'Live Space',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.people_alt_rounded, color: Colors.white70, size: 14),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$participantCount',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _room.disconnect(),
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.25),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -381,36 +483,39 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
     required IconData icon,
     required Color color,
     required VoidCallback onTap,
+    Color? backgroundColor,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 44,
-        height: 44,
+        width: 42,
+        height: 42,
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.15),
+          color: backgroundColor ?? Colors.white.withOpacity(0.12),
           shape: BoxShape.circle,
+          border: Border.all(color: Colors.white.withOpacity(0.1), width: 0.5),
         ),
-        child: Icon(icon, color: color, size: 22),
+        child: Icon(icon, color: color, size: 20),
       ),
     );
   }
 
   // Chat overlay for portrait mode (semi-transparent over video)
-  Widget _buildChatOverlay({double height = 200}) {
-    return Container(
-      height: height,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            Colors.black.withValues(alpha: 0.7),
-            Colors.transparent,
-          ],
+  Widget _buildChatOverlay({double height = 220}) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(20),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          height: height,
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.4),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.12), width: 0.5),
+          ),
+          child: _buildMessagesList(),
         ),
       ),
-      child: _buildMessagesList(),
     );
   }
 
@@ -559,75 +664,80 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
 
   // Bottom bar for portrait mode
   Widget _buildBottomBar(bool isMuted) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      color: Colors.black.withValues(alpha: 0.85),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            // Chat toggle
-            _controlButton(
-              icon: Icons.chat_rounded,
-              color: _showChat ? Colors.blueAccent : Colors.white,
-              onTap: () => setState(() => _showChat = !_showChat),
-            ),
-            const SizedBox(width: 8),
-            // Chat input (inline)
-            Expanded(
-              child: TextField(
-                controller: _chatController,
-                focusNode: _chatFocusNode,
-                style: const TextStyle(color: Colors.white, fontSize: 13),
-                decoration: InputDecoration(
-                  hintText: 'Say something...',
-                  hintStyle:
-                      const TextStyle(color: Colors.white54, fontSize: 13),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.1),
-                  contentPadding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(20),
-                    borderSide: BorderSide.none,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.45),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
+          ),
+          child: Row(
+            children: [
+              // Chat toggle
+              _controlButton(
+                icon: Icons.chat_bubble_rounded,
+                color: _showChat ? AppTheme.primaryOrange : Colors.white70,
+                onTap: () => setState(() => _showChat = !_showChat),
+              ),
+              const SizedBox(width: 8),
+              // Chat input (inline)
+              Expanded(
+                child: TextField(
+                  controller: _chatController,
+                  focusNode: _chatFocusNode,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Say something...',
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                    filled: true,
+                    fillColor: Colors.white.withOpacity(0.1),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      borderSide: BorderSide.none,
+                    ),
+                    isDense: true,
                   ),
-                  isDense: true,
+                  onSubmitted: (_) => _sendMessage(),
+                  onTap: () {
+                    if (!_showChat) setState(() => _showChat = true);
+                  },
                 ),
-                onSubmitted: (_) => _sendMessage(),
-                onTap: () {
-                  if (!_showChat) setState(() => _showChat = true);
-                },
               ),
-            ),
-            const SizedBox(width: 4),
-            GestureDetector(
-              onTap: _sendMessage,
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(
-                  color: Colors.blueAccent,
-                  shape: BoxShape.circle,
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: _sendMessage,
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: const BoxDecoration(
+                    color: AppTheme.primaryOrange,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.send_rounded, color: Colors.white, size: 16),
                 ),
-                child:
-                    const Icon(Icons.send, color: Colors.white, size: 16),
               ),
-            ),
-            const SizedBox(width: 8),
-            _controlButton(
-              icon:
-                  isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
-              color: isMuted ? Colors.red : Colors.white,
-              onTap: () =>
-                  ref.read(isAudioMutedProvider.notifier).state = !isMuted,
-            ),
-            const SizedBox(width: 8),
-            _controlButton(
-              icon: Icons.call_end_rounded,
-              color: Colors.red,
-              onTap: () => _room.disconnect(),
-            ),
-          ],
+              const SizedBox(width: 8),
+              _controlButton(
+                icon: isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                color: isMuted ? Colors.redAccent : Colors.white,
+                onTap: () =>
+                    ref.read(isAudioMutedProvider.notifier).state = !isMuted,
+              ),
+              const SizedBox(width: 8),
+              _controlButton(
+                icon: Icons.call_end_rounded,
+                color: Colors.redAccent,
+                backgroundColor: Colors.redAccent.withOpacity(0.25),
+                onTap: () => _room.disconnect(),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -771,58 +881,80 @@ class _ThumbnailWidgetState extends State<_ThumbnailWidget> {
         .map((pub) => pub.track as VideoTrack)
         .firstOrNull;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        color: Colors.white.withValues(alpha: 0.1),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (videoTrack != null)
-              VideoTrackRenderer(videoTrack)
-            else
-              Center(
-                child: Text(
-                  widget.participant.identity.isNotEmpty
-                      ? widget.participant.identity[0].toUpperCase()
-                      : '?',
-                  style: const TextStyle(color: Colors.white, fontSize: 18),
+    final isSpeaking = widget.participant.isSpeaking;
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 300),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isSpeaking ? AppTheme.primaryOrange : Colors.white.withOpacity(0.15),
+          width: isSpeaking ? 2 : 1,
+        ),
+        boxShadow: isSpeaking
+            ? [
+                BoxShadow(
+                  color: AppTheme.primaryOrange.withOpacity(0.5),
+                  blurRadius: 8,
+                  spreadRadius: 1,
+                ),
+              ]
+            : null,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(15),
+        child: Container(
+          color: Colors.white.withOpacity(0.08),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (videoTrack != null)
+                VideoTrackRenderer(videoTrack)
+              else
+                Center(
+                  child: Text(
+                    widget.participant.identity.isNotEmpty
+                        ? widget.participant.identity[0].toUpperCase()
+                        : '?',
+                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              Positioned(
+                bottom: 4,
+                left: 4,
+                right: 4,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white.withOpacity(0.1), width: 0.5),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (isSpeaking)
+                        const Icon(Icons.volume_up_rounded, size: 11, color: AppTheme.primaryOrange)
+                      else if (widget.participant.isMicrophoneEnabled())
+                        const Icon(Icons.mic_rounded, size: 11, color: Colors.white)
+                      else
+                        const Icon(Icons.mic_off_rounded, size: 11, color: Colors.redAccent),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          widget.participant.name.isNotEmpty
+                              ? widget.participant.name
+                              : widget.participant.identity,
+                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            Positioned(
-              bottom: 2,
-              left: 4,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (widget.participant.isSpeaking)
-                      const Icon(Icons.volume_up,
-                          size: 10, color: Colors.green)
-                    else if (widget.participant.isMicrophoneEnabled())
-                      const Icon(Icons.mic, size: 10, color: Colors.white)
-                    else
-                      const Icon(Icons.mic_off, size: 10, color: Colors.red),
-                    const SizedBox(width: 2),
-                    Text(
-                      widget.participant.name.isNotEmpty
-                          ? widget.participant.name
-                          : widget.participant.identity,
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 9),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
