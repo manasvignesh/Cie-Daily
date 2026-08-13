@@ -152,13 +152,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 children: [
                   // User's actual posts grid
                   userPostsAsync.when(
-                    data: (posts) => _buildPostsGrid(context, posts),
+                    data: (posts) => _buildPostsGrid(context, posts, isSavedTab: false),
                     loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
                     error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
                   ),
                   // Saved Bookmarked Posts grid
                   bookmarkedPostsAsync.when(
-                    data: (posts) => _buildPostsGrid(context, posts),
+                    data: (posts) => _buildPostsGrid(context, posts, isSavedTab: true),
                     loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
                     error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
                   ),
@@ -756,17 +756,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildPostsGrid(BuildContext context, List<PostModel> posts) {
+  Widget _buildPostsGrid(BuildContext context, List<PostModel> posts, {required bool isSavedTab}) {
     if (posts.isEmpty) {
-      return _buildEmptyTab(context, Icons.bookmark_border_rounded, 'No saved posts yet');
-    }
-    if (!_gridView) {
-      return ListView.separated(
-        padding: const EdgeInsets.all(16),
-        itemCount: posts.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 12),
-        itemBuilder: (_, i) => _buildListCard(context, posts[i]),
-      );
+      if (isSavedTab) {
+        return _buildEmptyTab(context, Icons.bookmark_border_rounded, 'No saved posts yet');
+      } else {
+        return _buildEmptyTab(context, Icons.camera_alt_outlined, 'No posts yet');
+      }
     }
     return GridView.builder(
       padding: const EdgeInsets.all(2),
@@ -986,23 +982,18 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
         children: [
           Expanded(
             child: _TabItem(
-              icon: tabController.index == 0 ? Icons.grid_on_rounded : Icons.grid_3x3_rounded,
+              icon: Icons.grid_on_rounded,
               isActive: tabController.index == 0,
               onTap: () => tabController.animateTo(0),
             ),
           ),
           Expanded(
             child: _TabItem(
-              icon: tabController.index == 1 ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
+              icon: Icons.bookmark_border_rounded,
               isActive: tabController.index == 1,
               onTap: () => tabController.animateTo(1),
             ),
           ),
-          if (tabController.index == 0)
-            IconButton(
-              icon: Icon(gridView ? Icons.view_list_rounded : Icons.grid_on_rounded, color: Colors.white70, size: 22),
-              onPressed: () => onToggleGrid(!gridView),
-            ),
         ],
       ),
     );

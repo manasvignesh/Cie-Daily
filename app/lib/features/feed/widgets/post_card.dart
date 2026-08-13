@@ -184,186 +184,142 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   // FORMAT 1: 9:16 FULLSCREEN
   // ──────────────────────────────────────────────────────────────────────────
   Widget _buildFullscreen(BuildContext context) {
+    final safeBottom = MediaQuery.of(context).padding.bottom;
+    const navBarHeight = 96.0;
+    final bottomOffset = safeBottom + navBarHeight;
+
     return Container(
       color: Colors.black,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // Media
+          // Media — full screen cover
           _buildMedia(fit: BoxFit.cover),
 
           // Video progress bar
           if (_videoController != null && _videoController!.value.isInitialized)
             _buildVideoProgressBar(),
 
-          // Bottom scrim
+          // Bottom scrim gradient
           Positioned(
-            bottom: 0, left: 0, right: 0, height: 520,
+            bottom: 0, left: 0, right: 0, height: 420,
             child: IgnorePointer(
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    stops: const [0.0, 0.2, 0.55, 1.0],
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withOpacity(0.05),
-                      Colors.black.withOpacity(0.7),
-                      Colors.black.withOpacity(0.97),
-                    ],
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
                   ),
                 ),
               ),
             ),
           ),
 
-          // Top scrim
+          // Top scrim gradient for subtle header shadow
           Positioned(
-            top: 0, left: 0, right: 0, height: 160,
+            top: 0, left: 0, right: 0, height: 120,
             child: IgnorePointer(
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.black.withOpacity(0.55), Colors.transparent],
+                    colors: [Colors.black.withOpacity(0.4), Colors.transparent],
                   ),
                 ),
               ),
             ),
           ),
 
-          // Heart burst
+          // Right action column — positioned exactly above bottom navigation bar
+          Positioned(
+            right: 10,
+            bottom: bottomOffset + 12,
+            child: _buildActionColumn(context),
+          ),
+
+          // Bottom info overlay — positioned exactly above bottom navigation bar
+          Positioned(
+            left: 16,
+            right: 68,
+            bottom: bottomOffset + 12,
+            child: _buildBottomInfo(context),
+          ),
+
+          // Heart burst animation
           if (_showHeartAnimation) _buildHeartBurst(),
-
-          // UI overlay
-          SafeArea(
-            child: Stack(
-              children: [
-                // Top author bar
-                Positioned(
-                  top: 12, left: 16, right: 16,
-                  child: _buildAuthorRow(context, topBar: true),
-                ),
-                // Right actions
-                Positioned(
-                  right: 10, bottom: 120,
-                  child: _buildActionColumn(context),
-                ),
-                // Bottom info
-                Positioned(
-                  left: 16, right: 68, bottom: 64,
-                  child: _buildBottomInfo(context),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
   }
 
-  // ──────────────────────────────────────────────────────────────────────────
-  // FORMAT 2: 4:5 CARD
-  // ──────────────────────────────────────────────────────────────────────────
   Widget _build45(BuildContext context) {
-    final safeTop = MediaQuery.of(context).padding.top;
     final safeBottom = MediaQuery.of(context).padding.bottom;
-    // Floating nav bar is ~64px pill + 16px bottom padding + 16px top padding = ~96px
     const navBarHeight = 96.0;
     final bottomOffset = safeBottom + navBarHeight;
 
     return Container(
-      color: const Color(0xFF080808),
+      color: Colors.black,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Status bar spacer
-              SizedBox(height: safeTop),
+          // Centered 4:5 Media
+          Center(
+            child: AspectRatio(
+              aspectRatio: 4 / 5,
+              child: _buildMedia(fit: BoxFit.cover),
+            ),
+          ),
 
-              // 4:5 media container
-              AspectRatio(
+          // Video progress bar centered directly below the 4:5 aspect ratio frame
+          if (_videoController != null && _videoController!.value.isInitialized)
+            Center(
+              child: AspectRatio(
                 aspectRatio: 4 / 5,
                 child: Stack(
-                  fit: StackFit.expand,
                   children: [
-                    // Media — always BoxFit.cover into 4:5 frame
-                    _buildMedia(fit: BoxFit.cover),
-
-                    // Video progress bar
-                    if (_videoController != null && _videoController!.value.isInitialized)
-                      _buildVideoProgressBar(),
-
-                    // Bottom-of-video scrim
                     Positioned(
-                      bottom: 0, left: 0, right: 0, height: 160,
-                      child: IgnorePointer(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [Colors.transparent, Colors.black.withOpacity(0.82)],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Bold title overlaid on bottom of video
-                    Positioned(
-                      bottom: 14, left: 14, right: 64,
-                      child: Text(
-                        widget.post.title,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 19,
-                          fontWeight: FontWeight.w800,
-                          height: 1.22,
-                          shadows: [Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 2))],
-                        ),
-                      ),
+                      bottom: 0, left: 0, right: 0,
+                      child: _buildVideoProgressBar(),
                     ),
                   ],
                 ),
               ),
+            ),
 
-              // Bottom info section — padded so content stays above nav bar
-              Expanded(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(16, 14, 68, bottomOffset),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      // Author row
-                      _buildAuthorRow(context, topBar: false),
-                      const SizedBox(height: 10),
-                      // Caption snippet
-                      if (widget.post.blocks.isNotEmpty) _buildCaptionSnippet(),
-                      const SizedBox(height: 12),
-                      // Music ticker — always at fixed position, no Spacer pushing it down
-                      _buildMusicTicker(),
-                    ],
+          // Bottom scrim gradient
+          Positioned(
+            bottom: 0, left: 0, right: 0, height: 320,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
                   ),
                 ),
               ),
-            ],
+            ),
           ),
 
-          // Right action column — pinned above nav bar
+          // Right action column — identical layout height
           Positioned(
             right: 10,
-            bottom: bottomOffset,
+            bottom: bottomOffset + 12,
             child: _buildActionColumn(context),
           ),
 
-          // Heart burst
+          // Bottom info overlay — identical layout height
+          Positioned(
+            left: 16,
+            right: 68,
+            bottom: bottomOffset + 12,
+            child: _buildBottomInfo(context),
+          ),
+
+          // Heart burst animation
           if (_showHeartAnimation) _buildHeartBurst(),
         ],
       ),
@@ -456,16 +412,19 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
+        // Author details row (avatar, username, and Follow button)
+        _buildAuthorRow(context, topBar: false),
+        const SizedBox(height: 12),
         Text(
           post.title,
           maxLines: 3,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            height: 1.22,
-            shadows: [Shadow(color: Colors.black87, blurRadius: 8, offset: Offset(0, 2))],
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            height: 1.25,
+            shadows: [Shadow(color: Colors.black, blurRadius: 6)],
           ),
         ),
         const SizedBox(height: 8),
