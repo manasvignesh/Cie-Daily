@@ -5,7 +5,7 @@ import '../models/live_stream_model.dart';
 final liveStreamsProvider = StreamProvider.autoDispose<List<LiveStreamModel>>((ref) {
   return FirebaseFirestore.instance
       .collection('liveStreams')
-      // .where('status', isEqualTo: 'live') // TEMPORARILY DISABLED FOR TESTING
+      .where('status', isEqualTo: 'live')
       .snapshots()
       .map((snapshot) {
     final streams = snapshot.docs.map((doc) {
