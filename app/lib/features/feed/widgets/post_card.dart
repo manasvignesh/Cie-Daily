@@ -257,7 +257,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   Widget _build45(BuildContext context) {
     final safeTop = MediaQuery.of(context).padding.top;
     final safeBottom = MediaQuery.of(context).padding.bottom;
-    const navBarHeight = 96.0;
+    const navBarHeight = 65.0;
     final bottomOffset = safeBottom + navBarHeight;
 
     return Container(
@@ -309,7 +309,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
           // Right action column pinned on the right
           Positioned(
             right: 10,
-            bottom: bottomOffset + 12,
+            bottom: bottomOffset + 6,
             child: _buildActionColumn(context),
           ),
 
