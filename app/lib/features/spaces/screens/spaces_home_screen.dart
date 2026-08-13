@@ -2,6 +2,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/buttons/primary_button.dart';
 import '../../../core/widgets/data_display/app_avatar.dart';
@@ -9,6 +11,123 @@ import '../providers/spaces_provider.dart';
 
 class SpacesHomeScreen extends ConsumerWidget {
   const SpacesHomeScreen({super.key});
+
+  void _showCreateSpaceSheet(BuildContext context, WidgetRef ref) {
+    final titleController = TextEditingController();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF1C1C1E),
+      useSafeArea: true,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(16, 20, 16, MediaQuery.of(ctx).viewInsets.bottom + 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const Text(
+              'Go Live in a Space',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: titleController,
+              autofocus: true,
+              style: const TextStyle(color: Colors.white),
+              decoration: InputDecoration(
+                hintText: 'Enter Space Title (e.g. Campus Jam session)',
+                hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.06),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () async {
+                final title = titleController.text.trim();
+                if (title.isEmpty) return;
+
+                final user = FirebaseAuth.instance.currentUser;
+                if (user == null) return;
+
+                Navigator.pop(ctx);
+
+                // Show loading indicator
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (_) => const Center(
+                    child: CircularProgressIndicator(color: AppTheme.primaryOrange),
+                  ),
+                );
+
+                try {
+                  final roomId = 'live_${DateTime.now().millisecondsSinceEpoch}_${user.uid.substring(0, 5)}';
+                  final docRef = await FirebaseFirestore.instance.collection('liveStreams').add({
+                    'title': title,
+                    'hostId': user.uid,
+                    'hostName': user.displayName ?? 'Student',
+                    'hostAvatar': user.photoURL,
+                    'status': 'live',
+                    'roomName': roomId,
+                    'createdAt': FieldValue.serverTimestamp(),
+                  });
+
+                  if (context.mounted) {
+                    Navigator.pop(context); // Dismiss loading
+                    context.push('/spaces/${docRef.id}', extra: roomId);
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    Navigator.pop(context); // Dismiss loading
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to start Space: $e')),
+                    );
+                  }
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryOrange,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Start Live Space',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -29,7 +148,7 @@ class SpacesHomeScreen extends ConsumerWidget {
           }
 
           return ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 120), // Bottom padding for bottom navigation bar
             itemCount: streams.length,
             itemBuilder: (context, index) {
               final stream = streams[index];
@@ -46,6 +165,19 @@ class SpacesHomeScreen extends ConsumerWidget {
               style: const TextStyle(color: Colors.white70),
               textAlign: TextAlign.center,
             ),
+          ),
+        ),
+      ),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 90.0), // Padding to clear bottom navigation bar
+        child: FloatingActionButton.extended(
+          onPressed: () => _showCreateSpaceSheet(context, ref),
+          backgroundColor: AppTheme.primaryOrange,
+          foregroundColor: Colors.white,
+          icon: const Icon(Icons.sensors_rounded),
+          label: const Text(
+            'Go Live',
+            style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 0.5),
           ),
         ),
       ),

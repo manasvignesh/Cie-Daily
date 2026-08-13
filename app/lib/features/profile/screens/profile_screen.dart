@@ -49,6 +49,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
+    final userPostsAsync = ref.watch(userPostsProvider);
     final bookmarkedPostsAsync = ref.watch(bookmarkedPostsProvider);
     final screenSize = MediaQuery.of(context).size;
 
@@ -66,6 +67,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final handle = '@${displayName.toLowerCase().replaceAll(' ', '_').replaceAll(RegExp(r'[^a-z0-9_]'), '')}';
     final photoUrl = user.photoURL;
     final email = user.email ?? '';
+    final postsCount = userPostsAsync.value?.length ?? 0;
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: SystemUiOverlayStyle.light,
@@ -86,7 +88,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   _buildBioSection(context, displayName, handle, email),
 
                   // ── STATS ROW ──────────────────────────────────────────
-                  _buildStatsRow(context),
+                  _buildStatsRow(context, postsCount),
 
                   // ── ACTION BUTTONS ─────────────────────────────────────
                   _buildActionButtons(context),
@@ -108,14 +110,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           body: TabBarView(
             controller: _tabController,
             children: [
-              // Posts grid
+              // User's actual posts grid
+              userPostsAsync.when(
+                data: (posts) => _buildPostsGrid(context, posts),
+                loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+                error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+              ),
+              // Saved Bookmarked Posts grid
               bookmarkedPostsAsync.when(
                 data: (posts) => _buildPostsGrid(context, posts),
                 loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
                 error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
               ),
-              // Tagged placeholder
-              _buildEmptyTab(context, Icons.person_pin_circle_rounded, 'No tags yet'),
             ],
           ),
         ),
@@ -260,13 +266,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildStatsRow(BuildContext context) {
+  Widget _buildStatsRow(BuildContext context, int postsCount) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _StatBox(count: _postsCount, label: 'Posts'),
+          _StatBox(count: postsCount, label: 'Posts'),
           _buildStatDivider(),
           _StatBox(count: _followersCount, label: 'Followers'),
           _buildStatDivider(),
@@ -596,14 +602,14 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
         children: [
           Expanded(
             child: _TabItem(
-              icon: Icons.grid_on_rounded,
+              icon: tabController.index == 0 ? Icons.grid_on_rounded : Icons.grid_3x3_rounded,
               isActive: tabController.index == 0,
               onTap: () => tabController.animateTo(0),
             ),
           ),
           Expanded(
             child: _TabItem(
-              icon: Icons.person_pin_rounded,
+              icon: tabController.index == 1 ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
               isActive: tabController.index == 1,
               onTap: () => tabController.animateTo(1),
             ),
