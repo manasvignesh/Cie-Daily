@@ -12,6 +12,7 @@ import '../../../core/theme/responsive.dart';
 /// All other aspect ratios are displayed in 4:5 mode (cropped via BoxFit.cover).
 class PostCard extends StatefulWidget {
   final PostModel post;
+  final bool isVisible;
   final ValueChanged<bool> onLike;
   final ValueChanged<bool> onBookmark;
   final VoidCallback onComment;
@@ -20,6 +21,7 @@ class PostCard extends StatefulWidget {
   const PostCard({
     super.key,
     required this.post,
+    this.isVisible = true,
     required this.onLike,
     required this.onBookmark,
     required this.onComment,
@@ -36,6 +38,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   bool _isFollowing = false;
   late int _likesCount;
   VideoPlayerController? _videoController;
+  bool _isVideoInitializing = false;
+  bool _showPlayPauseOverlay = false;
 
   // Heart animation
   bool _showHeartAnimation = false;
@@ -70,13 +74,28 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
     _vinylCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat();
 
-    if (widget.post.videoUrl != null) {
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(widget.post.videoUrl!))
+    _initVideo();
+  }
+
+  void _initVideo() {
+    final url = widget.post.videoUrl;
+    if (url != null && url.isNotEmpty) {
+      _isVideoInitializing = true;
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(url))
         ..initialize().then((_) {
           if (mounted) {
-            setState(() {});
+            setState(() {
+              _isVideoInitializing = false;
+            });
             _videoController?.setLooping(true);
-            _videoController?.play();
+            if (widget.isVisible) {
+              _videoController?.play();
+            }
+          }
+        }).catchError((err) {
+          debugPrint('Video init error for post ${widget.post.id}: $err');
+          if (mounted) {
+            setState(() => _isVideoInitializing = false);
           }
         });
     }
@@ -93,6 +112,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(PostCard old) {
     super.didUpdateWidget(old);
+    if (old.post.id != widget.post.id) {
+      _videoController?.dispose();
+      _videoController = null;
+      _initVideo();
+    }
     if (old.post.id != widget.post.id || old.post.isLikedByCurrentUser != widget.post.isLikedByCurrentUser) {
       _isLiked = widget.post.isLikedByCurrentUser;
       _likesCount = widget.post.upvotes;
@@ -100,6 +124,29 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     if (old.post.id != widget.post.id || old.post.isBookmarkedByCurrentUser != widget.post.isBookmarkedByCurrentUser) {
       _isBookmarked = widget.post.isBookmarkedByCurrentUser;
     }
+    if (old.isVisible != widget.isVisible) {
+      if (widget.isVisible) {
+        _videoController?.play();
+      } else {
+        _videoController?.pause();
+      }
+    }
+  }
+
+  void _togglePlayPause() {
+    if (_videoController == null || !_videoController!.value.isInitialized) return;
+    setState(() {
+      if (_videoController!.value.isPlaying) {
+        _videoController!.pause();
+        _showPlayPauseOverlay = true;
+      } else {
+        _videoController!.play();
+        _showPlayPauseOverlay = true;
+        Future.delayed(const Duration(milliseconds: 600), () {
+          if (mounted) setState(() => _showPlayPauseOverlay = false);
+        });
+      }
+    });
   }
 
   void _handleLike() {
@@ -142,31 +189,71 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   }
 
   Widget _buildMedia({required BoxFit fit}) {
+    Widget content;
     if (_videoController != null && _videoController!.value.isInitialized) {
-      return FittedBox(
-        fit: fit,
-        child: SizedBox(
-          width: _videoController!.value.size.width,
-          height: _videoController!.value.size.height,
-          child: VideoPlayer(_videoController!),
+      content = Stack(
+        fit: StackFit.expand,
+        children: [
+          FittedBox(
+            fit: fit,
+            child: SizedBox(
+              width: _videoController!.value.size.width,
+              height: _videoController!.value.size.height,
+              child: VideoPlayer(_videoController!),
+            ),
+          ),
+          if (!_videoController!.value.isPlaying || _showPlayPauseOverlay)
+            Center(
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: _showPlayPauseOverlay || !_videoController!.value.isPlaying ? 1.0 : 0.0,
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white24, width: 1.5),
+                  ),
+                  child: Icon(
+                    _videoController!.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                    color: Colors.white,
+                    size: 40,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      );
+    } else if (_isVideoInitializing) {
+      content = Container(
+        color: Colors.black,
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.orange, strokeWidth: 2.5),
+        ),
+      );
+    } else if (widget.post.imageUrl != null) {
+      content = Image.network(widget.post.imageUrl!, fit: fit, width: double.infinity, height: double.infinity);
+    } else {
+      final hue = (widget.post.id.hashCode % 360).abs().toDouble();
+      content = Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              HSLColor.fromAHSL(1, hue, 0.55, 0.2).toColor(),
+              HSLColor.fromAHSL(1, (hue + 50) % 360, 0.65, 0.12).toColor(),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
         ),
       );
     }
-    if (widget.post.imageUrl != null) {
-      return Image.network(widget.post.imageUrl!, fit: fit, width: double.infinity, height: double.infinity);
-    }
-    final hue = (widget.post.id.hashCode % 360).abs().toDouble();
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            HSLColor.fromAHSL(1, hue, 0.55, 0.2).toColor(),
-            HSLColor.fromAHSL(1, (hue + 50) % 360, 0.65, 0.12).toColor(),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+
+    return GestureDetector(
+      onTap: _togglePlayPause,
+      onDoubleTap: _triggerDoubleTapHeart,
+      behavior: HitTestBehavior.opaque,
+      child: content,
     );
   }
 
@@ -175,10 +262,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   // ──────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onDoubleTap: _triggerDoubleTapHeart,
-      child: _buildFullscreen(context),
-    );
+    return _buildFullscreen(context);
   }
 
   // ──────────────────────────────────────────────────────────────────────────

@@ -20,6 +20,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   late PageController _pageController;
+  int _currentPageIndex = 0;
 
   @override
   void initState() {
@@ -66,6 +67,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 physics: const BouncingScrollPhysics(),
                 itemCount: posts.length,
                 onPageChanged: (index) async {
+                  setState(() => _currentPageIndex = index);
                   // Report previous post
                   await ref.read(engagementServiceProvider).stopTrackingAndReport();
                   // Start tracking new post
@@ -75,6 +77,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   final post = posts[index];
                   return PostCard(
                     post: post,
+                    isVisible: index == _currentPageIndex,
                     onLike: (isLiked) {
                       ref.read(feedRepositoryProvider).toggleLike(post.id, isLiked);
                     },

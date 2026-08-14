@@ -54,17 +54,33 @@ class AppResponsive {
     return safeBottom + navHeight + 8.0;
   }
 
-  /// Returns bottom offset for left metadata in Reels (70-80px breathing room above nav).
-  static double reelMetadataBottomOffset(BuildContext context) {
-    final navHeight = bottomNavHeight(context);
-    final safeBottom = systemBottomInset(context);
-    return safeBottom + navHeight + 18.0;
+  /// Returns the vertical padding used by the bottom navigation bar.
+  static double bottomNavVerticalPadding(BuildContext context) {
+    final isLandscape = AppResponsive.isLandscape(context);
+    final isCompactScreen = isCompact(context);
+    return isLandscape ? 6.0 : (isCompactScreen ? 10.0 : 14.0);
   }
 
-  /// Returns bottom offset for right action buttons in Reels (50-60px above nav).
-  static double reelActionsBottomOffset(BuildContext context) {
+  /// Returns the total height occupied by the bottom navigation including padding.
+  static double totalBottomNavSpace(BuildContext context) {
     final navHeight = bottomNavHeight(context);
+    final verticalPadding = bottomNavVerticalPadding(context);
     final safeBottom = systemBottomInset(context);
-    return safeBottom + navHeight - 2.0;
+    // Total space = system inset + top padding + nav bar + bottom padding
+    return safeBottom + (verticalPadding * 2) + navHeight;
+  }
+
+  /// Returns bottom offset for left metadata in Reels (positioned low near bottom nav).
+  static double reelMetadataBottomOffset(BuildContext context) {
+    final safeBottom = systemBottomInset(context);
+    // Position low, just above system navigation area
+    return safeBottom + 5.0;
+  }
+
+  /// Returns bottom offset for right action buttons in Reels (positioned low near bottom nav).
+  static double reelActionsBottomOffset(BuildContext context) {
+    final safeBottom = systemBottomInset(context);
+    // Position low, just above system navigation area
+    return safeBottom + 8.0;
   }
 }
