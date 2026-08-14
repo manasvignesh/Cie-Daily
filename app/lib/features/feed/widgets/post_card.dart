@@ -84,13 +84,15 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       _videoController = VideoPlayerController.networkUrl(Uri.parse(url))
         ..initialize().then((_) {
           if (mounted) {
-            setState(() {
-              _isVideoInitializing = false;
-            });
             _videoController?.setLooping(true);
+            _videoController?.setVolume(1.0);
+            _videoController?.addListener(_onVideoControllerUpdate);
             if (widget.isVisible) {
               _videoController?.play();
             }
+            setState(() {
+              _isVideoInitializing = false;
+            });
           }
         }).catchError((err) {
           debugPrint('Video init error for post ${widget.post.id}: $err');
@@ -101,10 +103,17 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     }
   }
 
+  void _onVideoControllerUpdate() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
     _heartCtrl.dispose();
     _vinylCtrl.dispose();
+    _videoController?.removeListener(_onVideoControllerUpdate);
     _videoController?.dispose();
     super.dispose();
   }
@@ -113,6 +122,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   void didUpdateWidget(PostCard old) {
     super.didUpdateWidget(old);
     if (old.post.id != widget.post.id) {
+      _videoController?.removeListener(_onVideoControllerUpdate);
       _videoController?.dispose();
       _videoController = null;
       _initVideo();
@@ -191,15 +201,21 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   Widget _buildMedia({required BoxFit fit}) {
     Widget content;
     if (_videoController != null && _videoController!.value.isInitialized) {
+      final size = _videoController!.value.size;
+      final videoWidth = (size.width > 0) ? size.width : 1080.0;
+      final videoHeight = (size.height > 0) ? size.height : 1920.0;
+
       content = Stack(
         fit: StackFit.expand,
         children: [
-          FittedBox(
-            fit: fit,
-            child: SizedBox(
-              width: _videoController!.value.size.width,
-              height: _videoController!.value.size.height,
-              child: VideoPlayer(_videoController!),
+          SizedBox.expand(
+            child: FittedBox(
+              fit: fit,
+              child: SizedBox(
+                width: videoWidth,
+                height: videoHeight,
+                child: VideoPlayer(_videoController!),
+              ),
             ),
           ),
           if (!_videoController!.value.isPlaying || _showPlayPauseOverlay)
