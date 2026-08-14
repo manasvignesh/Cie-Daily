@@ -77,6 +77,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     _initVideo();
   }
 
+  DateTime _lastTapTime = DateTime.fromMillisecondsSinceEpoch(0);
+
   void _initVideo() {
     final url = widget.post.videoUrl;
     if (url != null && url.isNotEmpty) {
@@ -86,7 +88,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
           if (mounted) {
             _videoController?.setLooping(true);
             _videoController?.setVolume(1.0);
-            _videoController?.addListener(_onVideoControllerUpdate);
             if (widget.isVisible) {
               _videoController?.play();
             }
@@ -103,17 +104,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     }
   }
 
-  void _onVideoControllerUpdate() {
-    if (mounted) {
-      setState(() {});
-    }
-  }
-
   @override
   void dispose() {
     _heartCtrl.dispose();
     _vinylCtrl.dispose();
-    _videoController?.removeListener(_onVideoControllerUpdate);
     _videoController?.dispose();
     super.dispose();
   }
@@ -122,7 +116,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   void didUpdateWidget(PostCard old) {
     super.didUpdateWidget(old);
     if (old.post.id != widget.post.id) {
-      _videoController?.removeListener(_onVideoControllerUpdate);
       _videoController?.dispose();
       _videoController = null;
       _initVideo();
@@ -143,19 +136,28 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     }
   }
 
+  void _handleTap() {
+    final now = DateTime.now();
+    if (now.difference(_lastTapTime).inMilliseconds < 300) {
+      _triggerDoubleTapHeart();
+    } else {
+      _togglePlayPause();
+    }
+    _lastTapTime = now;
+  }
+
   void _togglePlayPause() {
     if (_videoController == null || !_videoController!.value.isInitialized) return;
+    if (_videoController!.value.isPlaying) {
+      _videoController!.pause();
+    } else {
+      _videoController!.play();
+    }
     setState(() {
-      if (_videoController!.value.isPlaying) {
-        _videoController!.pause();
-        _showPlayPauseOverlay = true;
-      } else {
-        _videoController!.play();
-        _showPlayPauseOverlay = true;
-        Future.delayed(const Duration(milliseconds: 600), () {
-          if (mounted) setState(() => _showPlayPauseOverlay = false);
-        });
-      }
+      _showPlayPauseOverlay = true;
+    });
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() => _showPlayPauseOverlay = false);
     });
   }
 
@@ -200,7 +202,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
   Widget _buildMedia({required BoxFit fit}) {
     Widget content;
-    if (_videoController != null && _videoController!.value.isInitialized) {
+    final isInitialized = _videoController != null && _videoController!.value.isInitialized;
+
+    if (isInitialized) {
       final size = _videoController!.value.size;
       final videoWidth = (size.width > 0) ? size.width : 1080.0;
       final videoHeight = (size.height > 0) ? size.height : 1920.0;
@@ -218,23 +222,19 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
               ),
             ),
           ),
-          if (!_videoController!.value.isPlaying || _showPlayPauseOverlay)
+          if (_showPlayPauseOverlay)
             Center(
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: _showPlayPauseOverlay || !_videoController!.value.isPlaying ? 1.0 : 0.0,
-                child: Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.black45,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white24, width: 1.5),
-                  ),
-                  child: Icon(
-                    _videoController!.value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-                    color: Colors.white,
-                    size: 40,
-                  ),
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white24, width: 1.5),
+                ),
+                child: Icon(
+                  _videoController!.value.isPlaying ? Icons.play_arrow_rounded : Icons.pause_rounded,
+                  color: Colors.white,
+                  size: 48,
                 ),
               ),
             ),
@@ -266,8 +266,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     }
 
     return GestureDetector(
-      onTap: _togglePlayPause,
-      onDoubleTap: _triggerDoubleTapHeart,
+      onTap: _handleTap,
       behavior: HitTestBehavior.opaque,
       child: content,
     );
