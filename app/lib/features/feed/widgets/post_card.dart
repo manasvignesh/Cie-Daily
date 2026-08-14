@@ -177,7 +177,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return GestureDetector(
       onDoubleTap: _triggerDoubleTapHeart,
-      child: _isFullscreen ? _buildFullscreen(context) : _build45(context),
+      child: _buildFullscreen(context),
     );
   }
 
