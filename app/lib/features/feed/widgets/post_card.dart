@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../models/post_model.dart';
 import '../../../core/widgets/data_display/app_avatar.dart';
+import '../../../core/theme/responsive.dart';
 
 /// Supports exactly two display formats:
 ///  - 9:16  → TRUE FULLSCREEN  (video/image fills entire screen; UI overlays on top)
@@ -184,9 +185,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   // FORMAT 1: 9:16 FULLSCREEN
   // ──────────────────────────────────────────────────────────────────────────
   Widget _buildFullscreen(BuildContext context) {
-    final safeBottom = MediaQuery.of(context).padding.bottom;
-    const navBarHeight = 96.0;
-    final bottomOffset = safeBottom + navBarHeight;
+    final bottomOffset = AppResponsive.overlayBottomOffset(context);
 
     return Container(
       color: Colors.black,
@@ -232,18 +231,18 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
             ),
           ),
 
-          // Right action column — positioned exactly above bottom navigation bar
+          // Right action column — positioned dynamically above navigation bar
           Positioned(
             right: 10,
-            bottom: bottomOffset + 12,
+            bottom: bottomOffset,
             child: _buildActionColumn(context),
           ),
 
-          // Bottom info overlay — positioned exactly above bottom navigation bar
+          // Bottom info overlay — positioned dynamically above navigation bar
           Positioned(
             left: 16,
             right: 68,
-            bottom: bottomOffset + 12,
+            bottom: bottomOffset,
             child: _buildBottomInfo(context),
           ),
 
@@ -255,10 +254,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   }
 
   Widget _build45(BuildContext context) {
-    final safeTop = MediaQuery.of(context).padding.top;
-    final safeBottom = MediaQuery.of(context).padding.bottom;
-    const navBarHeight = 65.0;
-    final bottomOffset = safeBottom + navBarHeight;
+    final safeTop = AppResponsive.systemTopInset(context);
+    final bottomOffset = AppResponsive.overlayBottomOffset(context);
 
     return Container(
       color: Colors.black,
@@ -309,7 +306,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
           // Right action column pinned on the right
           Positioned(
             right: 10,
-            bottom: bottomOffset + 6,
+            bottom: bottomOffset,
             child: _buildActionColumn(context),
           ),
 

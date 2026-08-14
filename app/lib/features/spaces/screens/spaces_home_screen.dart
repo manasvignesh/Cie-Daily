@@ -5,7 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/widgets/buttons/primary_button.dart';
+import '../../../core/theme/responsive.dart';
 import '../../../core/widgets/data_display/app_avatar.dart';
 import '../providers/spaces_provider.dart';
 
@@ -173,7 +173,7 @@ class SpacesHomeScreen extends ConsumerWidget {
       ),
       floatingActionButton: isMlritAdmin
           ? Padding(
-              padding: const EdgeInsets.only(bottom: 90.0), // Padding to clear bottom navigation bar
+              padding: EdgeInsets.only(bottom: AppResponsive.overlayBottomOffset(context)),
               child: FloatingActionButton.extended(
                 onPressed: () => _showCreateSpaceSheet(context, ref),
                 backgroundColor: AppTheme.primaryOrange,

@@ -10,6 +10,8 @@ import '../data/chat_repository.dart';
 import '../models/chat_models.dart';
 import '../providers/chat_providers.dart';
 
+import '../../../core/theme/responsive.dart';
+
 class ChatListScreen extends ConsumerStatefulWidget {
   const ChatListScreen({super.key});
 
@@ -150,7 +152,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+        padding: EdgeInsets.fromLTRB(16, 8, 16, AppResponsive.overlayBottomOffset(context) + 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
