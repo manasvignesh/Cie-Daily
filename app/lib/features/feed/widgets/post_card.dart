@@ -185,7 +185,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   // FORMAT 1: 9:16 FULLSCREEN
   // ──────────────────────────────────────────────────────────────────────────
   Widget _buildFullscreen(BuildContext context) {
-    final bottomOffset = AppResponsive.overlayBottomOffset(context);
+    final metaBottomOffset = AppResponsive.reelMetadataBottomOffset(context);
+    final actionBottomOffset = AppResponsive.reelActionsBottomOffset(context);
 
     return Container(
       color: Colors.black,
@@ -231,18 +232,18 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
             ),
           ),
 
-          // Right action column — positioned dynamically above navigation bar
+          // Right action column — positioned lower alongside caption
           Positioned(
             right: 10,
-            bottom: bottomOffset,
+            bottom: actionBottomOffset,
             child: _buildActionColumn(context),
           ),
 
-          // Bottom info overlay — positioned dynamically above navigation bar
+          // Bottom info overlay — 70-80px breathing room above bottom navigation
           Positioned(
             left: 16,
             right: 68,
-            bottom: bottomOffset,
+            bottom: metaBottomOffset,
             child: _buildBottomInfo(context),
           ),
 

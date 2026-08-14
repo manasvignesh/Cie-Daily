@@ -51,6 +51,20 @@ class AppResponsive {
   static double overlayBottomOffset(BuildContext context) {
     final navHeight = bottomNavHeight(context);
     final safeBottom = systemBottomInset(context);
-    return safeBottom + navHeight - 12.0;
+    return safeBottom + navHeight + 8.0;
+  }
+
+  /// Returns bottom offset for left metadata in Reels (70-80px breathing room above nav).
+  static double reelMetadataBottomOffset(BuildContext context) {
+    final navHeight = bottomNavHeight(context);
+    final safeBottom = systemBottomInset(context);
+    return safeBottom + navHeight + 18.0;
+  }
+
+  /// Returns bottom offset for right action buttons in Reels (50-60px above nav).
+  static double reelActionsBottomOffset(BuildContext context) {
+    final navHeight = bottomNavHeight(context);
+    final safeBottom = systemBottomInset(context);
+    return safeBottom + navHeight - 2.0;
   }
 }
