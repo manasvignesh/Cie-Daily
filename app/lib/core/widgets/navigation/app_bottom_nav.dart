@@ -56,7 +56,7 @@ class AppBottomNav extends StatelessWidget {
                   _NavItem(
                     icon: Icons.explore_outlined,
                     activeIcon: Icons.explore_rounded,
-                    label: 'Discover',
+                    label: 'Reels',
                     isSelected: currentIndex == 1,
                     onTap: () => onItemSelected(1),
                   ),
