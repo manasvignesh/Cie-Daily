@@ -193,10 +193,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         routes: [
           GoRoute(
             path: '/home',
-            builder: (context, state) => const HomeScreen(),
-          ),
-          GoRoute(
-            path: '/discover',
             builder: (context, state) => const DiscoverScreen(),
             routes: [
               GoRoute(
@@ -207,6 +203,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 },
               ),
             ],
+          ),
+          GoRoute(
+            path: '/discover',
+            builder: (context, state) => const HomeScreen(),
           ),
           GoRoute(
             path: '/spaces',

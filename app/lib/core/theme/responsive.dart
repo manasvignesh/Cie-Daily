@@ -51,6 +51,6 @@ class AppResponsive {
   static double overlayBottomOffset(BuildContext context) {
     final navHeight = bottomNavHeight(context);
     final safeBottom = systemBottomInset(context);
-    return safeBottom + navHeight + 8.0;
+    return safeBottom + navHeight - 12.0;
   }
 }

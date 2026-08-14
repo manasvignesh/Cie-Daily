@@ -405,22 +405,22 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       children: [
         // Author details row (avatar, username, and Follow button)
         _buildAuthorRow(context, topBar: false),
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
         Text(
           post.title,
-          maxLines: 3,
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             color: Colors.white,
-            fontSize: 16,
+            fontSize: 14.5,
             fontWeight: FontWeight.bold,
-            height: 1.25,
+            height: 1.2,
             shadows: [Shadow(color: Colors.black, blurRadius: 6)],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
         if (post.blocks.isNotEmpty) _buildCaptionSnippet(),
-        const SizedBox(height: 14),
+        const SizedBox(height: 6),
         _buildMusicTicker(),
       ],
     );
@@ -442,7 +442,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       child: AnimatedSize(
         duration: const Duration(milliseconds: 200),
         child: RichText(
-          maxLines: _captionExpanded ? null : 2,
+          maxLines: _captionExpanded ? null : 1,
           overflow: _captionExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
           text: TextSpan(
             children: [
@@ -450,15 +450,15 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                 text: text,
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.85),
-                  fontSize: 13.5,
-                  height: 1.45,
+                  fontSize: 12.5,
+                  height: 1.35,
                   shadows: const [Shadow(color: Colors.black87, blurRadius: 4)],
                 ),
               ),
               if (!_captionExpanded)
                 TextSpan(
                   text: ' more',
-                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13.5, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12.5, fontWeight: FontWeight.w600),
                 ),
             ],
           ),
