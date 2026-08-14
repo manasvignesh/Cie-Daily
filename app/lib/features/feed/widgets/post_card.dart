@@ -77,14 +77,15 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     _initVideo();
   }
 
-  DateTime _lastTapTime = DateTime.fromMillisecondsSinceEpoch(0);
-
   void _initVideo() {
     final url = widget.post.videoUrl;
     if (url != null && url.isNotEmpty) {
       _isVideoInitializing = true;
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(url))
-        ..initialize().then((_) {
+      _videoController?.dispose();
+      _videoController = VideoPlayerController.networkUrl(
+        Uri.parse(url),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      )..initialize().then((_) {
           if (mounted) {
             _videoController?.setLooping(true);
             _videoController?.setVolume(1.0);
@@ -115,7 +116,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(PostCard old) {
     super.didUpdateWidget(old);
-    if (old.post.id != widget.post.id) {
+    if (old.post.id != widget.post.id || old.post.videoUrl != widget.post.videoUrl) {
       _videoController?.dispose();
       _videoController = null;
       _initVideo();
@@ -129,21 +130,13 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     }
     if (old.isVisible != widget.isVisible) {
       if (widget.isVisible) {
-        _videoController?.play();
+        if (_videoController != null && _videoController!.value.isInitialized) {
+          _videoController?.play();
+        }
       } else {
         _videoController?.pause();
       }
     }
-  }
-
-  void _handleTap() {
-    final now = DateTime.now();
-    if (now.difference(_lastTapTime).inMilliseconds < 300) {
-      _triggerDoubleTapHeart();
-    } else {
-      _togglePlayPause();
-    }
-    _lastTapTime = now;
   }
 
   void _togglePlayPause() {
@@ -201,57 +194,14 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   }
 
   Widget _buildMedia({required BoxFit fit}) {
-    Widget content;
-    final isInitialized = _videoController != null && _videoController!.value.isInitialized;
+    final url = widget.post.videoUrl;
 
-    if (isInitialized) {
-      final size = _videoController!.value.size;
-      final videoWidth = (size.width > 0) ? size.width : 1080.0;
-      final videoHeight = (size.height > 0) ? size.height : 1920.0;
-
-      content = Stack(
-        fit: StackFit.expand,
-        children: [
-          SizedBox.expand(
-            child: FittedBox(
-              fit: fit,
-              child: SizedBox(
-                width: videoWidth,
-                height: videoHeight,
-                child: VideoPlayer(_videoController!),
-              ),
-            ),
-          ),
-          if (_showPlayPauseOverlay)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.black54,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: Colors.white24, width: 1.5),
-                ),
-                child: Icon(
-                  _videoController!.value.isPlaying ? Icons.play_arrow_rounded : Icons.pause_rounded,
-                  color: Colors.white,
-                  size: 48,
-                ),
-              ),
-            ),
-        ],
-      );
-    } else if (_isVideoInitializing) {
-      content = Container(
-        color: Colors.black,
-        child: const Center(
-          child: CircularProgressIndicator(color: Colors.orange, strokeWidth: 2.5),
-        ),
-      );
-    } else if (widget.post.imageUrl != null) {
-      content = Image.network(widget.post.imageUrl!, fit: fit, width: double.infinity, height: double.infinity);
-    } else {
+    if (url == null || url.isEmpty) {
+      if (widget.post.imageUrl != null) {
+        return Image.network(widget.post.imageUrl!, fit: fit, width: double.infinity, height: double.infinity);
+      }
       final hue = (widget.post.id.hashCode % 360).abs().toDouble();
-      content = Container(
+      return Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
@@ -265,10 +215,61 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       );
     }
 
+    if (_videoController == null || !_videoController!.value.isInitialized) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: CircularProgressIndicator(color: Colors.orange, strokeWidth: 2.5),
+        ),
+      );
+    }
+
+    final size = _videoController!.value.size;
+    final videoWidth = (size.width > 0) ? size.width : 1080.0;
+    final videoHeight = (size.height > 0) ? size.height : 1920.0;
+
     return GestureDetector(
-      onTap: _handleTap,
+      onTap: _togglePlayPause,
+      onDoubleTap: _triggerDoubleTapHeart,
       behavior: HitTestBehavior.opaque,
-      child: content,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          SizedBox.expand(
+            child: FittedBox(
+              fit: fit,
+              child: SizedBox(
+                width: videoWidth,
+                height: videoHeight,
+                child: VideoPlayer(_videoController!),
+              ),
+            ),
+          ),
+          ValueListenableBuilder(
+            valueListenable: _videoController!,
+            builder: (context, VideoPlayerValue value, child) {
+              if (!value.isPlaying || _showPlayPauseOverlay) {
+                return Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.black54,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white24, width: 1.5),
+                    ),
+                    child: Icon(
+                      value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 48,
+                    ),
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
+        ],
+      ),
     );
   }
 
