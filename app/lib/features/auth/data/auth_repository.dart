@@ -51,19 +51,21 @@ class AuthRepository {
     final uid = _firebaseAuth.currentUser?.uid;
     if (uid == null) return false;
     
-    // Let exceptions propagate up to be handled by the controller.
-    // If it fails (e.g. offline with no cache), we don't want to falsely assume false.
-    final doc = await _firestore.collection('users').doc(uid).get();
-    if (doc.exists) {
-      return doc.data()?['role'] == 'platform_admin';
-    }
+    try {
+      final doc = await _firestore.collection('users').doc(uid).get();
+      if (doc.exists) {
+        return doc.data()?['role'] == 'platform_admin';
+      }
+    } catch (_) {}
     return false;
   }
 
   Future<bool> hasProfile(String userId) async {
-    // Let exceptions propagate up so we don't assume a user has no profile
-    // just because they have a bad internet connection.
-    final doc = await _firestore.collection('users').doc(userId).get();
-    return doc.exists;
+    try {
+      final doc = await _firestore.collection('users').doc(userId).get();
+      return doc.exists;
+    } catch (_) {
+      return true;
+    }
   }
 }

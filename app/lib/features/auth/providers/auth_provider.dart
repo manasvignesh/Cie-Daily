@@ -62,22 +62,33 @@ class AuthController extends StateNotifier<AuthStatus> {
         state = AuthStatus.authenticatedStudent;
       }
     } catch (e) {
-      // If we fail to fetch (e.g. no connection & no cache), stay unauthenticated.
-      // Better to retry login than to overwrite the profile.
-      state = AuthStatus.unauthenticated;
+      // If user is non-null, default to authenticatedStudent so user enters app seamlessly
+      state = AuthStatus.authenticatedStudent;
     }
   }
 
   Future<void> signInWithEmailAndPassword(String email, String password) async {
     await _repository.signInWithEmailAndPassword(email, password);
+    final user = _repository.currentUser;
+    if (user != null) {
+      await _handleAuthChange(user);
+    }
   }
 
   Future<void> signUpWithEmailAndPassword(String email, String password) async {
     await _repository.signUpWithEmailAndPassword(email, password);
+    final user = _repository.currentUser;
+    if (user != null) {
+      await _handleAuthChange(user);
+    }
   }
 
   Future<void> signInWithGoogle() async {
     await _repository.signInWithGoogle();
+    final user = _repository.currentUser;
+    if (user != null) {
+      await _handleAuthChange(user);
+    }
   }
 
   Future<void> logout() async {
