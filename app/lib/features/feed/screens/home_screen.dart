@@ -7,6 +7,7 @@ import '../data/firebase_feed_repository.dart';
 import '../services/engagement_service.dart';
 import '../widgets/post_card.dart';
 import '../widgets/comments_bottom_sheet.dart';
+import '../widgets/in_app_share_bottom_sheet.dart';
 import '../../../core/widgets/indicators/loading_skeleton.dart';
 import '../../../core/widgets/indicators/error_state.dart';
 import '../../../core/widgets/indicators/empty_state.dart';
@@ -89,7 +90,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       CommentsBottomSheet.show(context, post.id);
                     },
                     onShare: () {
-                      // Share functionality
+                      InAppShareBottomSheet.show(context, post);
                     },
                   );
                 },

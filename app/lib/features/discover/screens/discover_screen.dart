@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../providers/discover_provider.dart';
+import '../../../core/utils/role_utils.dart';
 
 class DiscoverScreen extends ConsumerStatefulWidget {
   const DiscoverScreen({super.key});
@@ -25,7 +26,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
   Widget build(BuildContext context) {
     final articlesAsync = ref.watch(discoverArticlesProvider);
     final user = FirebaseAuth.instance.currentUser;
-    final isMlritUser = user?.email?.endsWith('@mlrit.ac.in') ?? false;
+    final canCreate = canCreateContent(user?.email);
 
     return Scaffold(
       appBar: AppBar(
@@ -33,7 +34,7 @@ class _DiscoverScreenState extends ConsumerState<DiscoverScreen> {
         backgroundColor: Theme.of(context).colorScheme.surface,
         elevation: 0,
         actions: [
-          if (isMlritUser)
+          if (canCreate)
             IconButton(
               icon: const Icon(Icons.add),
               tooltip: 'Add Post',
