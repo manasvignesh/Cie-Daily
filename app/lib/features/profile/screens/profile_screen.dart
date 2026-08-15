@@ -4,9 +4,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:go_router/go_router.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 import '../../feed/models/post_model.dart';
+import '../../../core/utils/role_utils.dart';
+import '../../../core/widgets/verified_badge.dart';
+import '../../../core/widgets/data_display/app_avatar.dart';
+import '../../chat/providers/chat_providers.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -24,19 +29,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   final int _followersCount = 0;
   final int _followingCount = 0;
 
-  // Mock highlights
-  final List<Map<String, dynamic>> _highlights = [
-    {'label': 'Campus', 'color': const Color(0xFFFF5A1F)},
-    {'label': 'Events', 'color': const Color(0xFF5856D6)},
-    {'label': 'Sports', 'color': const Color(0xFF34C759)},
-    {'label': 'Art', 'color': const Color(0xFFFF2D55)},
-    {'label': 'Tech', 'color': const Color(0xFF007AFF)},
-  ];
-
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
     _tabController.addListener(() => setState(() {}));
   }
 
@@ -52,6 +48,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final userProfileAsync = ref.watch(userProfileProvider);
     final userPostsAsync = ref.watch(userPostsProvider);
     final bookmarkedPostsAsync = ref.watch(bookmarkedPostsProvider);
+    final likedPostsAsync = ref.watch(likedPostsProvider);
+    final conversationsAsync = ref.watch(conversationsProvider);
     final screenSize = MediaQuery.of(context).size;
 
     if (user == null) {
@@ -61,6 +59,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       );
     }
 
+    final userRole = getUserRole(user.email);
+    final isStudent = userRole == UserRole.STUDENT;
+    final isCreatorOrAdmin = canCreateContent(user.email);
+
     return userProfileAsync.when(
       data: (profileData) {
         final rawName = profileData?['name'] as String? ?? user.displayName ?? '';
@@ -68,13 +70,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         final displayName = rawName.isNotEmpty ? rawName : (emailPrefix.isNotEmpty ? emailPrefix : 'Student');
         final handle = '@${displayName.toLowerCase().replaceAll(' ', '_').replaceAll(RegExp(r'[^a-z0-9_]'), '')}';
         
-        final bio = profileData?['bio'] as String? ?? 'Sharing campus life, one drop at a time ✨';
+        final bio = profileData?['bio'] as String? ?? (isStudent ? 'Learning, exploring & connecting on campus ✨' : 'Sharing campus life, one drop at a time ✨');
         final department = profileData?['department'] as String? ?? 'CS';
         final yearOfStudy = profileData?['yearOfStudy']?.toString() ?? '1';
         
         final photoUrl = profileData?['photoUrl'] as String? ?? user.photoURL;
         final email = user.email ?? '';
         final postsCount = userPostsAsync.value?.length ?? 0;
+        final savedCount = bookmarkedPostsAsync.value?.length ?? 0;
+        final likedCount = likedPostsAsync.value?.length ?? 0;
+        final connectionsCount = conversationsAsync.value?.length ?? 0;
         
         final List<dynamic> rawHighlights = profileData?['highlights'] as List<dynamic>? ?? [
           {'label': 'Campus', 'color': '0xFFFF5A1F'},
@@ -98,8 +103,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               department: department,
               yearOfStudy: yearOfStudy,
               photoUrl: photoUrl,
+              isCreatorOrAdmin: isCreatorOrAdmin,
             ),
             body: NestedScrollView(
+              physics: const ClampingScrollPhysics(),
               headerSliverBuilder: (context, innerBoxIsScrolled) => [
                 SliverToBoxAdapter(
                   child: Column(
@@ -118,10 +125,18 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         department: department,
                         yearOfStudy: yearOfStudy,
                         connectionCode: profileData?['connectionCode'] as String? ?? '',
+                        isCreatorOrAdmin: isCreatorOrAdmin,
                       ),
 
                       // ── STATS ROW ──────────────────────────────────────────
-                      _buildStatsRow(context, postsCount),
+                      _buildStatsRow(
+                        context,
+                        isStudent: isStudent,
+                        postsCount: postsCount,
+                        savedCount: savedCount,
+                        likedCount: likedCount,
+                        connectionsCount: connectionsCount,
+                      ),
 
                       // ── ACTION BUTTONS ─────────────────────────────────────
                       _buildActionButtons(
@@ -142,28 +157,85 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                     ],
                   ),
                 ),
-                // ── TABS ──────────────────────────────────────────────────────
+                // ── TABS HEADER ──────────────────────────────────────────────
                 SliverPersistentHeader(
                   pinned: true,
-                  delegate: _TabBarDelegate(tabController: _tabController, gridView: _gridView, onToggleGrid: (v) => setState(() => _gridView = v)),
+                  delegate: _TabBarDelegate(
+                    tabController: _tabController,
+                    isStudent: isStudent,
+                  ),
                 ),
               ],
               body: TabBarView(
                 controller: _tabController,
-                children: [
-                  // User's actual posts grid
-                  userPostsAsync.when(
-                    data: (posts) => _buildPostsGrid(context, posts, isSavedTab: false),
-                    loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-                    error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
-                  ),
-                  // Saved Bookmarked Posts grid
-                  bookmarkedPostsAsync.when(
-                    data: (posts) => _buildPostsGrid(context, posts, isSavedTab: true),
-                    loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-                    error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
-                  ),
-                ],
+                physics: const ClampingScrollPhysics(),
+                children: isStudent
+                    ? [
+                        // STUDENT TAB 1: Saved Drops (Bookmarks)
+                        bookmarkedPostsAsync.when(
+                          data: (posts) => _buildPostsGrid(
+                            context,
+                            posts,
+                            emptyTitle: 'No Saved Drops Yet',
+                            emptyMessage: 'Bookmark articles and reels in your feed to read or watch later!',
+                            emptyIcon: Icons.bookmark_border_rounded,
+                          ),
+                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+                          error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                        ),
+                        // STUDENT TAB 2: Connections List
+                        _buildConnectionsTab(context, profileData?['connectionCode'] as String? ?? ''),
+                        // STUDENT TAB 3: Upvoted / Liked Drops
+                        likedPostsAsync.when(
+                          data: (posts) => _buildPostsGrid(
+                            context,
+                            posts,
+                            emptyTitle: 'No Upvoted Drops Yet',
+                            emptyMessage: 'Upvote reels and articles in your feed to save them here!',
+                            emptyIcon: Icons.favorite_border_rounded,
+                          ),
+                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+                          error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                        ),
+                      ]
+                    : [
+                        // CREATOR / ADMIN TAB 1: Published Drops
+                        userPostsAsync.when(
+                          data: (posts) => _buildPostsGrid(
+                            context,
+                            posts,
+                            emptyTitle: 'No Published Drops Yet',
+                            emptyMessage: 'Create your first campus reel or article drop!',
+                            emptyIcon: Icons.camera_alt_outlined,
+                          ),
+                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+                          error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                        ),
+                        // CREATOR / ADMIN TAB 2: Saved Drops
+                        bookmarkedPostsAsync.when(
+                          data: (posts) => _buildPostsGrid(
+                            context,
+                            posts,
+                            emptyTitle: 'No Saved Posts Yet',
+                            emptyMessage: 'Bookmark posts to save them for later.',
+                            emptyIcon: Icons.bookmark_border_rounded,
+                          ),
+                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+                          error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                        ),
+                        // CREATOR / ADMIN TAB 3: Upvoted Drops
+                        likedPostsAsync.when(
+                          data: (posts) => _buildPostsGrid(
+                            context,
+                            posts,
+                            emptyTitle: 'No Liked Posts Yet',
+                            emptyMessage: 'Liked posts will appear here.',
+                            emptyIcon: Icons.favorite_border_rounded,
+                          ),
+                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+                          error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                        ),
+                      ],
               ),
             ),
           ),
@@ -181,6 +253,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required String department,
     required String yearOfStudy,
     required String? photoUrl,
+    required bool isCreatorOrAdmin,
   }) {
     return AppBar(
       backgroundColor: Colors.transparent,
@@ -193,12 +266,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       ),
       centerTitle: false,
       actions: [
-        IconButton(
-          icon: const Icon(Icons.add_box_outlined, color: Colors.white, size: 26),
-          onPressed: () {},
-        ),
+        if (isCreatorOrAdmin)
+          IconButton(
+            icon: const Icon(Icons.add_box_outlined, color: Colors.white, size: 26),
+            tooltip: 'Create Post',
+            onPressed: () {
+              context.push('/create_article_post');
+            },
+          ),
         IconButton(
           icon: const Icon(Icons.menu_rounded, color: Colors.white, size: 26),
+          tooltip: 'Menu',
           onPressed: () => _showSettingsSheet(
             context,
             name: displayName,
@@ -299,6 +377,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required String department,
     required String yearOfStudy,
     required String connectionCode,
+    required bool isCreatorOrAdmin,
   }) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
@@ -308,8 +387,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           Row(
             children: [
               Text(displayName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-              const SizedBox(width: 6),
-              const Icon(Icons.verified_rounded, color: Color(0xFF007AFF), size: 18),
+              if (isCreatorOrAdmin) ...[
+                const SizedBox(width: 6),
+                const VerifiedBadge(size: 18),
+              ],
             ],
           ),
           const SizedBox(height: 3),
@@ -366,18 +447,33 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildStatsRow(BuildContext context, int postsCount) {
+  Widget _buildStatsRow(
+    BuildContext context, {
+    required bool isStudent,
+    required int postsCount,
+    required int savedCount,
+    required int likedCount,
+    required int connectionsCount,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          _StatBox(count: postsCount, label: 'Posts'),
-          _buildStatDivider(),
-          _StatBox(count: _followersCount, label: 'Followers'),
-          _buildStatDivider(),
-          _StatBox(count: _followingCount, label: 'Following'),
-        ],
+        children: isStudent
+            ? [
+                _StatBox(count: savedCount, label: 'Saved Drops'),
+                _buildStatDivider(),
+                _StatBox(count: connectionsCount, label: 'Connections'),
+                _buildStatDivider(),
+                _StatBox(count: likedCount, label: 'Upvoted'),
+              ]
+            : [
+                _StatBox(count: postsCount, label: 'Published'),
+                _buildStatDivider(),
+                _StatBox(count: _followersCount, label: 'Followers'),
+                _buildStatDivider(),
+                _StatBox(count: _followingCount, label: 'Following'),
+              ],
       ),
     );
   }
@@ -421,8 +517,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               filled: false,
             ),
           ),
-          const SizedBox(width: 8),
-          _ProfileIconBtn(icon: Icons.person_add_alt_1_rounded, onTap: () {}),
         ],
       ),
     );
@@ -444,6 +538,403 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
+  Widget _buildHighlights(BuildContext context, List<Map<String, dynamic>> highlights) {
+    return Container(
+      height: 95,
+      margin: const EdgeInsets.only(top: 16),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        itemCount: highlights.length + 1,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return _buildAddHighlightCircle(context, highlights);
+          }
+          final item = highlights[index - 1];
+          final colorVal = int.tryParse(item['color'] as String? ?? '') ?? 0xFFFF5A1F;
+          return _buildHighlightCircle(item['label'] as String? ?? 'Spotlight', Color(colorVal));
+        },
+      ),
+    );
+  }
+
+  Widget _buildAddHighlightCircle(BuildContext context, List<Map<String, dynamic>> currentHighlights) {
+    return GestureDetector(
+      onTap: () => _showAddHighlightSheet(context, currentHighlights),
+      child: Padding(
+        padding: const EdgeInsets.only(right: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 60, height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFF333333), width: 1.5),
+                color: const Color(0xFF111111),
+              ),
+              child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
+            ),
+            const SizedBox(height: 6),
+            const Text('New', style: TextStyle(color: Color(0xFF888888), fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHighlightCircle(String label, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 60, height: 60,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [color, color.withOpacity(0.5)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              boxShadow: [BoxShadow(color: color.withOpacity(0.35), blurRadius: 10, spreadRadius: 1)],
+            ),
+            child: const Icon(Icons.auto_stories_rounded, color: Colors.white, size: 26),
+          ),
+          const SizedBox(height: 6),
+          Text(label, style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 11)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPostsGrid(
+    BuildContext context,
+    List<PostModel> posts, {
+    required String emptyTitle,
+    required String emptyMessage,
+    required IconData emptyIcon,
+  }) {
+    if (posts.isEmpty) {
+      return _buildEmptyTab(context, emptyIcon, emptyTitle, emptyMessage);
+    }
+    return GridView.builder(
+      padding: const EdgeInsets.all(2),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
+        childAspectRatio: 1,
+      ),
+      itemCount: posts.length,
+      itemBuilder: (_, i) => _buildGridCell(context, posts[i]),
+    );
+  }
+
+  Widget _buildConnectionsTab(BuildContext context, String connectionCode) {
+    final conversationsAsync = ref.watch(conversationsProvider);
+    final currentUser = FirebaseAuth.instance.currentUser;
+
+    return conversationsAsync.when(
+      data: (conversations) {
+        if (conversations.isEmpty) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.people_outline_rounded, size: 54, color: Colors.white.withOpacity(0.3)),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'No Campus Connections Yet',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Share your Connection Code with peers in CIE Chat to link accounts and share drops!',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  if (connectionCode.isNotEmpty)
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF5A1F),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      ),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: connectionCode));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Connection Code copied!')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded, size: 16),
+                      label: Text('Copy Code: $connectionCode'),
+                    ),
+                ],
+              ),
+            ),
+          );
+        }
+
+        return ListView.separated(
+          padding: const EdgeInsets.all(12),
+          itemCount: conversations.length,
+          separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+          itemBuilder: (context, index) {
+            final conv = conversations[index];
+            final partnerId = conv.participants.firstWhere(
+              (id) => id != currentUser?.uid,
+              orElse: () => '',
+            );
+            final details = conv.participantDetails[partnerId] as Map<String, dynamic>?;
+            final partnerName = details?['name'] as String? ?? 'Student';
+            final partnerAvatar = details?['photoUrl'] as String?;
+
+            return ListTile(
+              leading: AppAvatar(
+                imageUrl: partnerAvatar,
+                fallbackText: partnerName,
+                radius: 20,
+              ),
+              title: Text(
+                partnerName,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
+              ),
+              subtitle: const Text(
+                'Connected Peer',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              trailing: IconButton(
+                icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFFF5A1F)),
+                onPressed: () {
+                  context.push('/chat/conversation/${conv.id}', extra: {
+                    'partnerUid': partnerId,
+                    'partnerName': partnerName,
+                    'partnerPhotoUrl': partnerAvatar,
+                  });
+                },
+              ),
+            );
+          },
+        );
+      },
+      loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+      error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+    );
+  }
+
+  Widget _buildEmptyTab(BuildContext context, IconData icon, String title, String subtitle) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 54, color: Colors.white.withOpacity(0.3)),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.white54, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGridCell(BuildContext context, PostModel post) {
+    final hasImage = post.imageUrl != null && post.imageUrl!.isNotEmpty;
+    final hasVideo = post.videoUrl != null && post.videoUrl!.isNotEmpty;
+    final hue = (post.id.hashCode % 360).abs().toDouble();
+
+    return GestureDetector(
+      onTap: () {
+        if (post.category.toLowerCase() == 'reel' || post.videoUrl != null) {
+          context.push('/reel/${post.id}');
+        } else {
+          context.push('/discover/article', extra: post);
+        }
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Background
+          if (hasImage)
+            Image.network(
+              post.imageUrl!,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _buildGradientPlaceholder(hue),
+            )
+          else
+            _buildGradientPlaceholder(hue),
+
+          // Video indicator
+          if (hasVideo && !hasImage)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
+              ),
+            )
+          else if (hasVideo)
+            const Positioned(
+              top: 6, right: 6,
+              child: Icon(Icons.play_circle_filled_rounded, color: Colors.white, size: 22,
+                shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
+            ),
+
+          // Title overlay at bottom
+          Positioned(
+            bottom: 0, left: 0, right: 0,
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(6, 20, 6, 6),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+                ),
+              ),
+              child: Text(
+                post.title,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600, height: 1.2),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGradientPlaceholder(double hue) {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            HSLColor.fromAHSL(1, hue, 0.45, 0.22).toColor(),
+            HSLColor.fromAHSL(1, (hue + 40) % 360, 0.55, 0.14).toColor(),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+    );
+  }
+
+  void _showAddHighlightSheet(BuildContext context, List<Map<String, dynamic>> currentHighlights) {
+    final labelCtrl = TextEditingController();
+    Color selectedColor = const Color(0xFFFF5A1F);
+
+    final colors = [
+      const Color(0xFFFF5A1F),
+      const Color(0xFF5856D6),
+      const Color(0xFF34C759),
+      const Color(0xFFFF2D55),
+      const Color(0xFF007AFF),
+      const Color(0xFFFFCC00),
+      const Color(0xFFAF52DE),
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) => Container(
+          margin: const EdgeInsets.all(12),
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 16, left: 20, right: 20),
+          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(24)),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              const Text('New Highlight', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
+              TextField(
+                controller: labelCtrl,
+                style: const TextStyle(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'Highlight Title',
+                  labelStyle: const TextStyle(color: Colors.white70),
+                  filled: true,
+                  fillColor: Colors.white.withOpacity(0.06),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text('Theme Color', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              const SizedBox(height: 10),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: colors.map((c) {
+                  final isSel = selectedColor == c;
+                  return GestureDetector(
+                    onTap: () => setSheetState(() => selectedColor = c),
+                    child: Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(
+                        color: c,
+                        shape: BoxShape.circle,
+                        border: isSel ? Border.all(color: Colors.white, width: 3) : null,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () async {
+                  final txt = labelCtrl.text.trim();
+                  if (txt.isEmpty) return;
+
+                  final user = FirebaseAuth.instance.currentUser;
+                  if (user == null) return;
+
+                  final updated = List<Map<String, dynamic>>.from(currentHighlights);
+                  updated.add({
+                    'label': txt,
+                    'color': '0x${selectedColor.value.toRadixString(16).toUpperCase()}',
+                  });
+
+                  Navigator.pop(ctx);
+
+                  await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                    'highlights': updated,
+                  });
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFF5A1F),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Add Highlight', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showEditProfileSheet(
     BuildContext context, {
     required String name,
@@ -460,24 +951,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      useSafeArea: true,
+      backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.fromLTRB(16, 20, 16, MediaQuery.of(ctx).viewInsets.bottom + 24),
+      builder: (ctx) => Container(
+        margin: const EdgeInsets.all(12),
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 16, left: 20, right: 20),
+        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(24)),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-              ),
-              const Text('Edit Profile', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
-              const SizedBox(height: 20),
+              Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+              const SizedBox(height: 16),
+              const Text('Edit Profile', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 16),
               TextField(
                 controller: nameCtrl,
                 style: const TextStyle(color: Colors.white),
@@ -492,6 +980,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               const SizedBox(height: 12),
               TextField(
                 controller: bioCtrl,
+                maxLines: 2,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Bio',
@@ -598,348 +1087,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildHighlights(BuildContext context, List<Map<String, dynamic>> highlights) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.fromLTRB(20, 20, 20, 12),
-          child: Text('Highlights', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
-        ),
-        SizedBox(
-          height: 90,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: highlights.length + 1,
-            itemBuilder: (_, i) {
-              if (i == 0) return _buildAddHighlightBtn(context, highlights);
-              final h = highlights[i - 1];
-              final colorHex = h['color'] as String? ?? '0xFFFF5A1F';
-              final color = Color(int.parse(colorHex));
-              return _buildHighlightCircle(h['label'] as String? ?? '', color);
-            },
-          ),
-        ),
-        const SizedBox(height: 4),
-      ],
-    );
-  }
-
-  Widget _buildAddHighlightBtn(BuildContext context, List<Map<String, dynamic>> currentHighlights) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          GestureDetector(
-            onTap: () => _showAddHighlightSheet(context, currentHighlights),
-            child: Container(
-              width: 60, height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF333333), width: 1.5),
-              ),
-              child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text('New', style: TextStyle(color: Color(0xFFAAAAAA), fontSize: 11)),
-        ],
-      ),
-    );
-  }
-
-  void _showAddHighlightSheet(BuildContext context, List<Map<String, dynamic>> currentHighlights) {
-    final labelCtrl = TextEditingController();
-    final colors = [
-      '0xFFFF5A1F',
-      '0xFF5856D6',
-      '0xFF34C759',
-      '0xFFFF2D55',
-      '0xFF007AFF',
-      '0xFFFFCC00',
-    ];
-    String selectedColor = colors.first;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      useSafeArea: true,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setStateSheet) => Padding(
-          padding: EdgeInsets.fromLTRB(16, 20, 16, MediaQuery.of(ctx).viewInsets.bottom + 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(width: 36, height: 4, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-              ),
-              const Text('Create Highlight', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
-              const SizedBox(height: 20),
-              TextField(
-                controller: labelCtrl,
-                autofocus: true,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Highlight Name (e.g. Projects)',
-                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                ),
-              ),
-              const SizedBox(height: 20),
-              const Text('Select Theme Color', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w600)),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 48,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: colors.length,
-                  itemBuilder: (_, index) {
-                    final colorHex = colors[index];
-                    final color = Color(int.parse(colorHex));
-                    final isSelected = colorHex == selectedColor;
-                    return GestureDetector(
-                      onTap: () => setStateSheet(() => selectedColor = colorHex),
-                      child: Container(
-                        width: 38, height: 38,
-                        margin: const EdgeInsets.only(right: 12),
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
-                          border: isSelected ? Border.all(color: Colors.white, width: 3) : null,
-                          boxShadow: isSelected ? [BoxShadow(color: color.withOpacity(0.6), blurRadius: 8, spreadRadius: 1)] : null,
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () async {
-                  final label = labelCtrl.text.trim();
-                  if (label.isEmpty) return;
-
-                  final user = FirebaseAuth.instance.currentUser;
-                  if (user == null) return;
-
-                  Navigator.pop(ctx);
-
-                  final updatedHighlights = List<Map<String, dynamic>>.from(currentHighlights);
-                  updatedHighlights.add({
-                    'label': label,
-                    'color': selectedColor,
-                  });
-
-                  try {
-                    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-                      'highlights': updatedHighlights,
-                    });
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to create: $e')));
-                    }
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF5A1F),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Add Highlight', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHighlightCircle(String label, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [color, color.withOpacity(0.5)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [BoxShadow(color: color.withOpacity(0.35), blurRadius: 10, spreadRadius: 1)],
-            ),
-            child: const Icon(Icons.auto_stories_rounded, color: Colors.white, size: 26),
-          ),
-          const SizedBox(height: 6),
-          Text(label, style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 11)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPostsGrid(BuildContext context, List<PostModel> posts, {required bool isSavedTab}) {
-    if (posts.isEmpty) {
-      if (isSavedTab) {
-        return _buildEmptyTab(context, Icons.bookmark_border_rounded, 'No saved posts yet');
-      } else {
-        return _buildEmptyTab(context, Icons.camera_alt_outlined, 'No posts yet');
-      }
-    }
-    return GridView.builder(
-      padding: const EdgeInsets.all(2),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 2,
-        mainAxisSpacing: 2,
-        childAspectRatio: 1,
-      ),
-      itemCount: posts.length,
-      itemBuilder: (_, i) => _buildGridCell(context, posts[i]),
-    );
-  }
-
-  Widget _buildGridCell(BuildContext context, PostModel post) {
-    final hasImage = post.imageUrl != null && post.imageUrl!.isNotEmpty;
-    final hasVideo = post.videoUrl != null && post.videoUrl!.isNotEmpty;
-    final hue = (post.id.hashCode % 360).abs().toDouble();
-
-    return GestureDetector(
-      onTap: () {},
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Background
-          if (hasImage)
-            Image.network(
-              post.imageUrl!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _buildGradientPlaceholder(hue),
-            )
-          else
-            _buildGradientPlaceholder(hue),
-
-          // Video indicator
-          if (hasVideo && !hasImage)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
-              ),
-            )
-          else if (hasVideo)
-            const Positioned(
-              top: 6, right: 6,
-              child: Icon(Icons.play_circle_filled_rounded, color: Colors.white, size: 22,
-                shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
-            ),
-
-          // Title overlay at bottom
-          Positioned(
-            bottom: 0, left: 0, right: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(6, 20, 6, 6),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
-                ),
-              ),
-              child: Text(
-                post.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600, height: 1.2),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGradientPlaceholder(double hue) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            HSLColor.fromAHSL(1, hue, 0.45, 0.22).toColor(),
-            HSLColor.fromAHSL(1, (hue + 40) % 360, 0.55, 0.14).toColor(),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildListCard(BuildContext context, PostModel post) {
-    return Container(
-      height: 90,
-      decoration: BoxDecoration(
-        color: const Color(0xFF111111),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), bottomLeft: Radius.circular(12)),
-            child: SizedBox(
-              width: 90, height: 90,
-              child: post.imageUrl != null
-                  ? Image.network(post.imageUrl!, fit: BoxFit.cover)
-                  : Container(color: const Color(0xFF1C1C2E), child: const Icon(Icons.article_rounded, color: Colors.white30, size: 32)),
-            ),
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(post.title, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, height: 1.3)),
-                  const SizedBox(height: 6),
-                  Text('By ${post.authorName}', style: const TextStyle(color: Color(0xFF888888), fontSize: 12)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEmptyTab(BuildContext context, IconData icon, String msg) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: Colors.white24, size: 56),
-          const SizedBox(height: 12),
-          Text(msg, style: const TextStyle(color: Color(0xFF666666), fontSize: 14)),
-        ],
-      ),
-    );
-  }
-
   void _showSettingsSheet(
     BuildContext context, {
     required String name,
@@ -1017,10 +1164,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
 
 class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   final TabController tabController;
-  final bool gridView;
-  final ValueChanged<bool> onToggleGrid;
+  final bool isStudent;
 
-  const _TabBarDelegate({required this.tabController, required this.gridView, required this.onToggleGrid});
+  const _TabBarDelegate({required this.tabController, required this.isStudent});
 
   @override
   double get minExtent => 46;
@@ -1032,22 +1178,59 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
     return Container(
       color: Colors.black,
       child: Row(
-        children: [
-          Expanded(
-            child: _TabItem(
-              icon: Icons.grid_on_rounded,
-              isActive: tabController.index == 0,
-              onTap: () => tabController.animateTo(0),
-            ),
-          ),
-          Expanded(
-            child: _TabItem(
-              icon: Icons.bookmark_border_rounded,
-              isActive: tabController.index == 1,
-              onTap: () => tabController.animateTo(1),
-            ),
-          ),
-        ],
+        children: isStudent
+            ? [
+                Expanded(
+                  child: _TabItem(
+                    icon: Icons.bookmark_border_rounded,
+                    label: 'Saved',
+                    isActive: tabController.index == 0,
+                    onTap: () => tabController.animateTo(0),
+                  ),
+                ),
+                Expanded(
+                  child: _TabItem(
+                    icon: Icons.people_outline_rounded,
+                    label: 'Connections',
+                    isActive: tabController.index == 1,
+                    onTap: () => tabController.animateTo(1),
+                  ),
+                ),
+                Expanded(
+                  child: _TabItem(
+                    icon: Icons.favorite_border_rounded,
+                    label: 'Upvoted',
+                    isActive: tabController.index == 2,
+                    onTap: () => tabController.animateTo(2),
+                  ),
+                ),
+              ]
+            : [
+                Expanded(
+                  child: _TabItem(
+                    icon: Icons.grid_on_rounded,
+                    label: 'Published',
+                    isActive: tabController.index == 0,
+                    onTap: () => tabController.animateTo(0),
+                  ),
+                ),
+                Expanded(
+                  child: _TabItem(
+                    icon: Icons.bookmark_border_rounded,
+                    label: 'Saved',
+                    isActive: tabController.index == 1,
+                    onTap: () => tabController.animateTo(1),
+                  ),
+                ),
+                Expanded(
+                  child: _TabItem(
+                    icon: Icons.favorite_border_rounded,
+                    label: 'Upvoted',
+                    isActive: tabController.index == 2,
+                    onTap: () => tabController.animateTo(2),
+                  ),
+                ),
+              ],
       ),
     );
   }
@@ -1055,15 +1238,21 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(_TabBarDelegate oldDelegate) =>
       oldDelegate.tabController != tabController ||
-      oldDelegate.gridView != gridView;
+      oldDelegate.isStudent != isStudent;
 }
 
 class _TabItem extends StatelessWidget {
   final IconData icon;
+  final String label;
   final bool isActive;
   final VoidCallback onTap;
 
-  const _TabItem({required this.icon, required this.isActive, required this.onTap});
+  const _TabItem({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1075,13 +1264,27 @@ class _TabItem extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, color: isActive ? Colors.white : Colors.white38, size: 24),
-            const SizedBox(height: 2),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon, color: isActive ? Colors.white : Colors.white38, size: 20),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: isActive ? Colors.white : Colors.white38,
+                    fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                    fontSize: 13,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              height: 1.5,
-              width: isActive ? 24 : 0,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(1)),
+              height: 2,
+              width: isActive ? 40 : 0,
+              decoration: BoxDecoration(color: const Color(0xFFFF5A1F), borderRadius: BorderRadius.circular(1)),
             ),
           ],
         ),
@@ -1098,19 +1301,24 @@ class _StatBox extends StatelessWidget {
   String _fmt(int n) {
     if (n >= 1000000) return '${(n / 1000000).toStringAsFixed(1)}M';
     if (n >= 1000) return '${(n / 1000).toStringAsFixed(1)}K';
-    return n.toString();
+    return '$n';
   }
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Column(
-        children: [
-          Text(_fmt(count), style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 3),
-          Text(label, style: const TextStyle(color: Color(0xFF888888), fontSize: 12.5, fontWeight: FontWeight.w400)),
-        ],
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          _fmt(count),
+          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: const TextStyle(color: Color(0xFF888888), fontSize: 12, fontWeight: FontWeight.w400),
+        ),
+      ],
     );
   }
 }
@@ -1120,7 +1328,7 @@ class _ProfileActionBtn extends StatelessWidget {
   final VoidCallback onTap;
   final bool filled;
 
-  const _ProfileActionBtn({required this.label, required this.onTap, required this.filled});
+  const _ProfileActionBtn({required this.label, required this.onTap, this.filled = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1128,43 +1336,20 @@ class _ProfileActionBtn extends StatelessWidget {
       onTap: onTap,
       child: Container(
         height: 36,
-        alignment: Alignment.center,
         decoration: BoxDecoration(
-          color: filled ? const Color(0xFFFF5A1F) : Colors.transparent,
+          color: filled ? const Color(0xFFFF5A1F) : const Color(0xFF1C1C1E),
           borderRadius: BorderRadius.circular(10),
-          border: filled ? null : Border.all(color: const Color(0xFF333333), width: 1),
+          border: filled ? null : Border.all(color: const Color(0xFF333333)),
         ),
+        alignment: Alignment.center,
         child: Text(
           label,
           style: TextStyle(
-            color: filled ? Colors.white : Colors.white,
+            color: Colors.white,
             fontSize: 13.5,
-            fontWeight: FontWeight.w600,
+            fontWeight: filled ? FontWeight.bold : FontWeight.w600,
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _ProfileIconBtn extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onTap;
-
-  const _ProfileIconBtn({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 36, height: 36,
-        decoration: BoxDecoration(
-          color: Colors.transparent,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: const Color(0xFF333333), width: 1),
-        ),
-        child: Icon(icon, color: Colors.white, size: 20),
       ),
     );
   }
@@ -1174,17 +1359,15 @@ class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final Color? color;
+  final Color color;
 
-  const _SettingsTile({required this.icon, required this.label, required this.onTap, this.color});
+  const _SettingsTile({required this.icon, required this.label, required this.onTap, this.color = Colors.white});
 
   @override
   Widget build(BuildContext context) {
-    final c = color ?? Colors.white;
     return ListTile(
-      leading: Icon(icon, color: c, size: 22),
-      title: Text(label, style: TextStyle(color: c, fontSize: 15, fontWeight: FontWeight.w500)),
-      trailing: color == null ? const Icon(Icons.chevron_right_rounded, color: Color(0xFF444444)) : null,
+      leading: Icon(icon, color: color),
+      title: Text(label, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w500)),
       onTap: onTap,
     );
   }
