@@ -106,7 +106,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               ),
               const SizedBox(height: 32),
               Text(
-                'Welcome to\nProject Catalyst',
+                'Welcome to\nCie Daily',
                 style: Theme.of(context).textTheme.displaySmall,
               ),
               const SizedBox(height: 12),
