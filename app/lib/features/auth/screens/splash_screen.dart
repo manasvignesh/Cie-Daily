@@ -12,15 +12,24 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
+  Timer? _navigationTimer;
+
   @override
   void initState() {
     super.initState();
+    _scheduleNavigation();
+  }
 
-    // Display exact poster splash for 4 seconds before navigating
-    Timer(const Duration(seconds: 4), () {
+  void _scheduleNavigation() {
+    final authStatus = ref.read(authControllerProvider);
+    // 4.0 seconds for first install/unauthenticated users; 2.5 seconds for signed-in users reopening the app
+    final int durationMs = (authStatus == AuthStatus.unauthenticated) ? 4000 : 2500;
+
+    _navigationTimer?.cancel();
+    _navigationTimer = Timer(Duration(milliseconds: durationMs), () {
       if (mounted) {
-        final authStatus = ref.read(authControllerProvider);
-        switch (authStatus) {
+        final currentAuthStatus = ref.read(authControllerProvider);
+        switch (currentAuthStatus) {
           case AuthStatus.unauthenticated:
             context.go('/login');
             break;
@@ -45,6 +54,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     precacheImage(const AssetImage('assets/illustrations/splash_poster.png'), context);
+  }
+
+  @override
+  void dispose() {
+    _navigationTimer?.cancel();
+    super.dispose();
   }
 
   @override

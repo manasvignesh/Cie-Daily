@@ -47,19 +47,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           if (state.matchedLocation == '/') return null;
           return isLoggingIn ? null : '/login';
         case AuthStatus.authenticatedAdmin:
+          if (isLoggingIn) return '/admin/dashboard';
           if (state.matchedLocation == '/') return null;
           if (state.matchedLocation.startsWith('/admin')) {
             return null;
           }
           return '/admin/dashboard';
         case AuthStatus.profileIncomplete:
+          if (isLoggingIn) return '/profile_setup';
           if (state.matchedLocation == '/') return null;
           return '/profile_setup';
         case AuthStatus.authenticatedStudent:
-          if (state.matchedLocation == '/') return null;
           if (isLoggingIn || state.matchedLocation == '/profile_setup') {
             return '/home';
           }
+          if (state.matchedLocation == '/') return null;
           return null;
       }
     },
