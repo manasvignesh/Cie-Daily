@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import '../../../core/utils/role_utils.dart';
 
 final authRepositoryProvider = Provider((ref) => AuthRepository(FirebaseAuth.instance, FirebaseFirestore.instance));
 
@@ -47,17 +48,7 @@ class AuthRepository {
   }
 
   Future<bool> isAdmin(String email) async {
-    if (email == 'manasvig43@gmail.com' || email == 'admin@cie.edu') return true;
-    final uid = _firebaseAuth.currentUser?.uid;
-    if (uid == null) return false;
-    
-    try {
-      final doc = await _firestore.collection('users').doc(uid).get();
-      if (doc.exists) {
-        return doc.data()?['role'] == 'platform_admin';
-      }
-    } catch (_) {}
-    return false;
+    return getUserRole(email) == UserRole.MAIN_ADMIN;
   }
 
   Future<bool> hasProfile(String userId) async {

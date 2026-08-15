@@ -10,6 +10,7 @@ import '../widgets/comments_bottom_sheet.dart';
 import '../../../core/widgets/indicators/loading_skeleton.dart';
 import '../../../core/widgets/indicators/error_state.dart';
 import '../../../core/widgets/indicators/empty_state.dart';
+import '../../../core/utils/role_utils.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -47,7 +48,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final feedState = ref.watch(feedProvider);
     final user = FirebaseAuth.instance.currentUser;
-    final isMlritUser = user?.email?.endsWith('@mlrit.ac.in') ?? false;
+    final canCreate = canCreateContent(user?.email);
 
     return Scaffold(
       body: Stack(
@@ -101,7 +102,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
           
-          if (isMlritUser)
+          if (canCreate)
             Positioned(
               top: 0,
               right: 16,

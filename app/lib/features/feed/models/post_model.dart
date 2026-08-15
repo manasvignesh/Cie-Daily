@@ -1,3 +1,5 @@
+import '../../../core/utils/role_utils.dart';
+
 class PostModel {
   final String id;
   final String title;
@@ -10,6 +12,7 @@ class PostModel {
   final DateTime createdAt;
   final String authorName;
   final String? authorAvatar;
+  final String? authorEmail;
   final String? imageUrl;
   final String? videoUrl;
   final String? aspectRatio;
@@ -21,6 +24,7 @@ class PostModel {
 
   int get upvotes => likesCount;
   int get commentCount => commentsCount;
+  bool get isAuthorVerified => isVerifiedUser(authorEmail);
 
   PostModel({
     required this.id,
@@ -34,6 +38,7 @@ class PostModel {
     required this.createdAt,
     required this.authorName,
     this.authorAvatar,
+    this.authorEmail,
     this.imageUrl,
     this.videoUrl,
     this.aspectRatio,
@@ -45,6 +50,7 @@ class PostModel {
   });
 
   factory PostModel.fromJson(Map<String, dynamic> json) {
+    final email = json['author']?['email'] as String? ?? json['authorEmail'] as String?;
     return PostModel(
       id: json['id'] as String,
       title: json['title'] as String? ?? 'Untitled',
@@ -57,8 +63,9 @@ class PostModel {
       createdAt: json['createdAt'] != null 
           ? (json['createdAt'] is String ? DateTime.parse(json['createdAt']) : DateTime.now()) 
           : DateTime.now(),
-      authorName: json['author']?['fullName'] as String? ?? 'Anonymous',
-      authorAvatar: json['author']?['avatarUrl'] as String?,
+      authorName: json['author']?['fullName'] as String? ?? json['authorName'] as String? ?? 'Anonymous',
+      authorAvatar: json['author']?['avatarUrl'] as String? ?? json['authorAvatar'] as String?,
+      authorEmail: email,
       imageUrl: (json['mediaUrls'] as List<dynamic>?)?.isNotEmpty == true ? json['mediaUrls'][0] : json['imageUrl'] as String?,
       videoUrl: json['videoUrl'] as String?,
       aspectRatio: json['aspectRatio'] as String?,

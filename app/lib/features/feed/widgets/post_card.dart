@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import '../models/post_model.dart';
 import '../../../core/widgets/data_display/app_avatar.dart';
+import '../../../core/widgets/verified_badge.dart';
+import '../../../core/utils/role_utils.dart';
 import '../../../core/theme/responsive.dart';
 
 /// Supports exactly two display formats:
@@ -451,6 +453,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                         ),
                       ),
                     ),
+                    if (post.isAuthorVerified || isVerifiedUser(post.authorEmail))
+                      const VerifiedBadge(size: 15),
                     if (topBar) ...[
                       const SizedBox(width: 6),
                       Text(
