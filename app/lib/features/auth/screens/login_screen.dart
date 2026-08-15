@@ -95,7 +95,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.blur_on_rounded, size: 48, color: Color(0xFFFF5A1F)),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: Image.asset(
+                  'assets/icons/app_logo.png',
+                  height: 64,
+                  width: 64,
+                  fit: BoxFit.cover,
+                ),
+              ),
               const SizedBox(height: 32),
               Text(
                 'Welcome to\nProject Catalyst',
