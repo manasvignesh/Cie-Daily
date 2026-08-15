@@ -276,7 +276,13 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
                         onPressed: isSent
                             ? null
                             : () async {
-                                final shareMessage = '📌 Shared ${isReel ? "Reel" : "Article"}: "${widget.post.title}"\n[Post ID: ${widget.post.id}]';
+                                final category = isReel ? "Reel" : "Article";
+                                final img = widget.post.imageUrl ?? '';
+                                final vid = widget.post.videoUrl ?? '';
+                                final author = widget.post.authorName.replaceAll('|', ' ');
+                                final avatar = widget.post.authorAvatar ?? '';
+                                final title = widget.post.title.replaceAll('|', ' ');
+                                final shareMessage = '[SHARED_POST|${widget.post.id}|$category|$title|$img|$vid|$author|$avatar]';
                                 try {
                                   await ref.read(chatRepositoryProvider).sendMessage(
                                         conv.id,

@@ -7,6 +7,7 @@ import '../../../core/theme/app_theme.dart';
 import '../data/chat_repository.dart';
 import '../models/chat_models.dart';
 import '../providers/chat_providers.dart';
+import '../widgets/shared_post_chat_card.dart';
 
 class IndividualChatScreen extends ConsumerStatefulWidget {
   final String conversationId;
@@ -249,35 +250,42 @@ class _IndividualChatScreenState extends ConsumerState<IndividualChatScreen> {
   }
 
   Widget _buildMessageBubble(ChatMessageModel msg, bool isMe) {
+    final sharedData = SharedPostData.tryParse(msg.content);
+
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        decoration: BoxDecoration(
-          color: isMe ? AppTheme.primaryOrange : const Color(0xFF2C2C2E),
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMe ? 16 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 16),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            Text(
-              msg.content,
-              style: const TextStyle(color: Colors.white, fontSize: 14.5, height: 1.35),
+      child: Column(
+        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        children: [
+          if (sharedData != null)
+            SharedPostChatCard(data: sharedData, isMe: isMe)
+          else
+            Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+              decoration: BoxDecoration(
+                color: isMe ? AppTheme.primaryOrange : const Color(0xFF2C2C2E),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(isMe ? 16 : 4),
+                  bottomRight: Radius.circular(isMe ? 4 : 16),
+                ),
+              ),
+              child: Text(
+                msg.content,
+                style: const TextStyle(color: Colors.white, fontSize: 14.5, height: 1.35),
+              ),
             ),
-            const SizedBox(height: 4),
-            Text(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10, left: 4, right: 4),
+            child: Text(
               _formatMsgTime(msg.timestamp),
-              style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 10),
+              style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 10),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
