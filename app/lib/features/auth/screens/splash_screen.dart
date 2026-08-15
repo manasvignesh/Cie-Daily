@@ -42,6 +42,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    precacheImage(const AssetImage('assets/illustrations/splash_poster.png'), context);
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
@@ -49,23 +55,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         child: Image.asset(
           'assets/illustrations/splash_poster.png',
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildFallbackBackground(),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFallbackBackground() {
-    return Container(
-      color: Colors.black,
-      child: const Center(
-        child: Text(
-          'Cie Daily',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 28,
-            fontWeight: FontWeight.bold,
-          ),
+          errorBuilder: (_, __, ___) => Container(color: Colors.black),
         ),
       ),
     );
