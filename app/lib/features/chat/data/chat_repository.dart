@@ -54,11 +54,13 @@ class ChatRepository {
         throw Exception('Student code "$cleanCode" not found. Please verify the code and try again.');
       }
       targetDoc = matches.first;
-      // Auto-populate target doc with this connection code
-      await _firestore.collection('users').doc(targetDoc.id).set(
-        {'connectionCode': cleanCode},
-        SetOptions(merge: true),
-      );
+      // Auto-populate target doc with this connection code if permitted
+      try {
+        await _firestore.collection('users').doc(targetDoc.id).set(
+          {'connectionCode': cleanCode},
+          SetOptions(merge: true),
+        );
+      } catch (_) {}
     }
     final targetUid = targetDoc.id;
     final targetData = targetDoc.data();
