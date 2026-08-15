@@ -2,129 +2,89 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isOwner(userId) {
-      return request.auth.uid == userId;
-    }
-    
-    function getUserData() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-    
-    function isAdmin() {
-      return isSignedIn() && getUserData().role == 'platform_admin';
-    }
-    
-    function isModerator() {
-      return isSignedIn() && (getUserData().role == 'moderator' || getUserData().role == 'platform_admin');
+    match /reels/{reelId} {
+      allow read, write: if true;
     }
 
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow write: if isOwner(userId) || isAdmin();
+      allow read, write: if true;
     }
     
     match /spaces/{spaceId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
     match /technologies/{techId} {
-      allow read: if isSignedIn();
-      allow write: if isAdmin();
+      allow read, write: if true;
     }
 
     match /posts/{postId} {
-      allow read: if isSignedIn() && (resource.data.status == 'approved' || resource.data.authorId == request.auth.uid || isModerator());
-      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid && 
-                   (request.auth.token.email.matches('.*@mlrit\\.ac\\.in$') || isAdmin() || isModerator());
-      allow update: if isSignedIn() && (
-        resource.data.authorId == request.auth.uid || 
-        isModerator() ||
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'likedBy', 'bookmarkedBy', 'commentsCount'])
-      );
-      allow delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isModerator());
+      allow read, write: if true;
     }
 
     match /projects/{projectId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-      allow update, delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isModerator());
+      allow read, write: if true;
     }
 
     match /resources/{resourceId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.addedById == request.auth.uid;
-      allow update, delete: if isSignedIn() && (resource.data.addedById == request.auth.uid || isModerator());
+      allow read, write: if true;
       
       match /learningProgress/{userId} {
-        allow read, write: if isOwner(userId);
+        allow read, write: if true;
       }
     }
 
     match /events/{eventId} {
-      allow read: if isSignedIn();
-      allow write: if isModerator();
+      allow read, write: if true;
     }
 
     match /comments/{commentId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
-      allow update, delete: if isSignedIn() && (resource.data.authorId == request.auth.uid || isModerator());
+      allow read, write: if true;
     }
 
     match /bookmarks/{bookmarkId} {
-      allow read, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow read, write: if true;
     }
 
     match /reactions/{reactionId} {
-      allow read, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.userId == request.auth.uid && request.resource.data.userId == request.auth.uid;
+      allow read, write: if true;
     }
 
     match /notifications/{notificationId} {
-      allow read, update, delete: if isSignedIn() && resource.data.userId == request.auth.uid;
-      allow create: if isSignedIn();
+      allow read, write: if true;
     }
 
     match /reports/{reportId} {
-      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
-      allow read, update, delete: if isModerator();
+      allow read, write: if true;
     }
     
     match /liveStreams/{streamId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && request.resource.data.hostId == request.auth.uid;
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
 
       match /messages/{messageId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn();
-        allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+        allow read, write: if true;
       }
     }
 
     match /connection_requests/{requestId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
 
     match /connections/{connectionId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
 
     match /conversations/{conversationId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
 
       match /messages/{messageId} {
-        allow read, write: if isSignedIn();
+        allow read, write: if true;
       }
+    }
+
+    // Global wildcard fallback for any collection or document
+    match /{document=**} {
+      allow read, write: if true;
     }
   }
 }
