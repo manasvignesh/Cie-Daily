@@ -9,6 +9,8 @@ import '../../../core/theme/responsive.dart';
 import '../../../core/widgets/data_display/app_avatar.dart';
 import '../providers/spaces_provider.dart';
 
+import '../../../core/utils/role_utils.dart';
+
 class SpacesHomeScreen extends ConsumerWidget {
   const SpacesHomeScreen({super.key});
 
@@ -134,7 +136,7 @@ class SpacesHomeScreen extends ConsumerWidget {
     final liveStreamsAsync = ref.watch(liveStreamsProvider);
 
     final user = FirebaseAuth.instance.currentUser;
-    final isMlritAdmin = user?.email?.endsWith('@mlrit.ac.in') ?? false;
+    final canHost = canHostLiveSpace(user?.email);
 
     return Scaffold(
       appBar: AppBar(
@@ -171,7 +173,7 @@ class SpacesHomeScreen extends ConsumerWidget {
           ),
         ),
       ),
-      floatingActionButton: isMlritAdmin
+      floatingActionButton: canHost
           ? Padding(
               padding: EdgeInsets.only(bottom: AppResponsive.overlayBottomOffset(context)),
               child: FloatingActionButton.extended(
