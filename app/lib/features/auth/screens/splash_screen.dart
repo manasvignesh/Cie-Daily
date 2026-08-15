@@ -16,8 +16,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   void initState() {
     super.initState();
 
-    // Display exact poster splash for 2.5 seconds before navigating
-    Timer(const Duration(milliseconds: 2500), () {
+    // Display exact poster splash for 4 seconds before navigating
+    Timer(const Duration(seconds: 4), () {
       if (mounted) {
         final authStatus = ref.read(authControllerProvider);
         switch (authStatus) {

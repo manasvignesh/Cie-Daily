@@ -44,16 +44,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         case AuthStatus.initial:
           return '/'; 
         case AuthStatus.unauthenticated:
+          if (state.matchedLocation == '/') return null;
           return isLoggingIn ? null : '/login';
         case AuthStatus.authenticatedAdmin:
+          if (state.matchedLocation == '/') return null;
           if (state.matchedLocation.startsWith('/admin')) {
             return null;
           }
           return '/admin/dashboard';
         case AuthStatus.profileIncomplete:
+          if (state.matchedLocation == '/') return null;
           return '/profile_setup';
         case AuthStatus.authenticatedStudent:
-          if (isLoggingIn || state.matchedLocation == '/' || state.matchedLocation == '/profile_setup') {
+          if (state.matchedLocation == '/') return null;
+          if (isLoggingIn || state.matchedLocation == '/profile_setup') {
             return '/home';
           }
           return null;
