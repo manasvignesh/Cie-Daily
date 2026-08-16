@@ -1,239 +1,287 @@
-````markdown
-# CIE Daily 🚀
+# 🚀 CIE Daily
 
-### Technology Awareness • Interactive Learning • Student Community
+<div align="center">
 
-CIE Daily is a technology-focused platform built for engineering students to stay updated with the rapidly changing world of technology, discover useful skills, learn from experts, and discuss what they discover with their peers.
+### **Technology Awareness • Interactive Learning • Student Community**
 
-It started with a simple question:
+**A platform built to help engineering students stay updated with technology, discover new skills, learn from experts, and discuss what they discover.**
 
-> **What if engineering students had a place dedicated to discovering what is actually happening in technology every day?**
+<br />
 
-CIE Daily evolved from that idea into an ecosystem combining **technology news, interactive short-form content, expert-led learning Spaces, student connections, and private 1-to-1 conversations.**
+> **Discover. Learn. Explore. Discuss. Grow.**
 
----
-
-## 🌍 Why CIE Daily?
-
-Technology is evolving every day.
-
-New applications are being built.  
-New technologies are emerging.  
-Companies are changing industries.  
-Engineering practices are constantly evolving.
-
-Yet students often discover these developments through fragmented sources or spend significant amounts of their attention consuming entertainment content.
-
-CIE Daily is designed to turn that attention into **technology awareness, learning, and growth.**
-
-The platform focuses primarily on **India**, while also covering important developments from around the world.
+</div>
 
 ---
 
-## 💡 The Evolution
+## 🌐 What is CIE Daily?
 
-CIE Daily didn't start as a large platform.
+**CIE Daily** is a technology-focused platform created for engineering students who want to understand how the world of technology is evolving every day.
 
-### 01 — Technology News
+The platform focuses primarily on **India**, while also covering important technological and engineering developments from around the world.
 
-The first idea was simple:
+It brings together:
 
-**What if engineering students could get concise technology and engineering news in one place?**
+**📰 Technology News**
+**🎬 Interactive Tech Reels**
+**🎙️ Expert-led Learning Spaces**
+**🔗 Student Connections**
+**💬 Private 1-to-1 Conversations**
 
-CIE members could contribute and publish relevant technology updates and articles.
+The idea is simple:
 
-### 02 — Interactive Technology Content
+> **Technology changes every day. Students should be able to keep up with it.**
 
-The idea evolved further.
+---
 
-Instead of only reading articles:
+# 💡 The Idea Behind CIE Daily
 
-**What if technology updates were presented in an engaging short-form format?**
+CIE Daily started from a simple observation:
 
-This led to the concept of technology-focused Reels — short, visual, informative content designed to make learning easier to consume.
+Engineering students spend a huge amount of time consuming information online, but important technology developments are scattered across different platforms.
 
-### 03 — Spaces
+So instead of asking students to search everywhere for technology updates, the idea was to create one focused ecosystem around **technology awareness + learning + interaction**.
 
-Then came the core MVP idea.
+### The concept evolved in stages.
 
-### **Spaces**
+```text
+Technology News
+       ↓
+Interactive Tech Reels
+       ↓
+Expert-led Spaces
+       ↓
+Student Connections
+       ↓
+Private Discussions
+```
 
-A Space allows people from CIE with expertise in a particular field to teach students through structured live learning sessions.
+---
 
-For example:
+# 🧠 01 — Technology News
 
-> **7 Days of Video Editing**  
-> 1–1.5 hour session every day  
-> Hosted by a CIE expert  
-> Open to students beyond a single college
+The first concept was straightforward:
 
-The goal isn't just to attend another event.
+### **What if engineering students had a dedicated place for technology news?**
 
-The goal is to help students:
+CIE Daily could present:
 
-- Discover new skills
-- Learn outside their curriculum
-- Explore areas they may want to pursue
-- Build additional knowledge and practical ability
-- Gain something valuable beyond their regular coursework
+* Technology developments
+* Engineering news
+* New applications
+* Emerging technologies
+* Indian technology updates
+* Important global developments
 
-### 04 — Student Connections & Chat
+The platform could also allow **CIE members to contribute and publish technology-focused articles**.
 
-The final piece came naturally.
+The objective was not simply to provide news.
 
-A student reads an interesting technology article.
+It was to help students **understand what is changing around them**.
 
-They want to send it to a friend.
+---
 
-They want to discuss it.
+# 🎬 02 — Interactive Technology Reels
 
-They want to exchange opinions.
+The idea then evolved further.
 
-So CIE Daily introduces **private student connections and 1-to-1 chat**, turning content consumption into conversation.
+Students already consume large amounts of short-form content.
+
+So the question became:
+
+> **What if that same format could be used to learn about technology?**
+
+CIE Daily introduces a short-form technology experience inspired by the simplicity and speed of Reels.
+
+Instead of endlessly scrolling through entertainment:
+
+### **Scroll through technology.**
+
+Students can quickly discover:
+
+* New technologies
+* Interesting engineering developments
+* Emerging applications
+* Industry changes
+* Short technology explanations
+
+The goal is to make learning **visual, quick and engaging**.
+
+---
+
+# 🎙️ 03 — Spaces
+
+### **The MVP learning initiative of CIE Daily**
+
+Spaces were designed around a different idea:
+
+> **Students should not only know about skills. They should have opportunities to learn them.**
+
+Imagine a CIE member who is highly skilled in video editing.
+
+They could create:
+
+### 🎥 `7 Days of Video Editing`
+
+A structured series where:
+
+**Day 1 → Day 2 → Day 3 → ... → Day 7**
+
+Students join a live Space for approximately **1–1.5 hours per session** and learn directly from someone with practical experience.
+
+The concept can extend to:
+
+```text
+Video Editing
+UI / UX
+Programming
+Artificial Intelligence
+Design
+Content Creation
+Emerging Technologies
+```
+
+Students can participate beyond a single college, while the instructors and initiative are rooted in **CIE**.
+
+The purpose is bigger than hosting another event.
+
+It is about helping students:
+
+**Explore skills → Discover interests → Learn practically → Build an advantage**
+
+---
+
+# 🔗 04 — Student Connections
+
+Learning becomes more useful when people can share it.
+
+CIE Daily therefore introduces a controlled student connection system using **unique connection codes**.
+
+Instead of publicly exposing personal phone numbers, students can intentionally establish connections.
+
+This creates the foundation for private communication.
+
+---
+
+# 💬 05 — Private 1-to-1 Chat
+
+The chat system came from a simple real-world use case.
+
+Imagine two students reading the same technology article.
+
+One wants to tell a friend:
+
+> *"Bro, look at this."*
+
+They want to share it.
+
+Discuss it.
+
+Exchange opinions.
+
+Continue the conversation.
+
+That is where private 1-to-1 communication comes in.
+
+### Content → Discussion → Connection
+
+CIE Daily therefore becomes more than a place to consume information.
+
+It becomes a place to **talk about what you learn**.
 
 ---
 
 # ✨ Core Features
 
-## 📰 Technology Feed
-
-A centralized feed for technology and engineering updates.
-
-- Technology news
-- Engineering developments
-- Indian technology ecosystem updates
-- Important global technology developments
-- Articles
-- Author information
-- Engagement
-
----
-
-## 🎬 Interactive Tech Reels
-
-Short-form technology content designed for fast and engaging learning.
-
-Instead of scrolling endlessly through entertainment:
-
-> **Scroll through technology.**
-
-The Reels experience is designed around concise information, strong visual hierarchy, and mobile-first consumption.
+| Feature                   | Purpose                                        |
+| ------------------------- | ---------------------------------------------- |
+| 📰 **Technology Feed**    | Discover technology & engineering developments |
+| 🎬 **Tech Reels**         | Short-form, interactive technology learning    |
+| 🎙️ **Spaces**            | Expert-led live learning sessions              |
+| 🔗 **Connections**        | Intentional peer discovery                     |
+| 💬 **Private Chat**       | One-to-one discussions                         |
+| 🛡️ **RBAC**              | Controlled student, creator & admin access     |
+| ✍️ **Creator Publishing** | CIE-driven technology content                  |
+| 👑 **Admin Controls**     | Platform governance and moderation             |
 
 ---
 
-## 🎙️ Spaces
+# 🏗️ Architecture
 
-The MVP learning ecosystem of CIE Daily.
-
-CIE experts can host structured learning sessions around specific skills.
-
-Examples:
-
-- Video Editing
-- UI/UX
-- Programming
-- AI
-- Design
-- Content Creation
-- Emerging Technologies
-
-A Space can become a multi-day learning series rather than a one-time session.
-
----
-
-## 🔗 Student Connections
-
-Students can establish intentional peer connections using unique connection codes.
-
-No need to publicly expose personal phone numbers.
-
-Connections become the foundation for private conversations.
-
----
-
-## 💬 Private 1-to-1 Chat
-
-Connected students can communicate privately.
-
-Use cases include:
-
-- Discussing technology articles
-- Sharing interesting updates
-- Exchanging opinions
-- Continuing conversations after Spaces
-- Peer-to-peer communication
+```text
+                           ┌──────────────────────┐
+                           │       CIE DAILY      │
+                           └──────────┬───────────┘
+                                      │
+                                      ▼
+                           ┌──────────────────────┐
+                           │     FLUTTER APP      │
+                           │       Dart           │
+                           └──────────┬───────────┘
+                                      │
+              ┌───────────────────────┼───────────────────────┐
+              │                       │                       │
+              ▼                       ▼                       ▼
+       ┌──────────────┐        ┌──────────────┐        ┌──────────────┐
+       │   RIVERPOD   │        │   GOROUTER   │        │   UI / UX    │
+       │ State Layer  │        │ Navigation   │        │ Design System│
+       └──────┬───────┘        └──────────────┘        └──────────────┘
+              │
+              ▼
+       ┌─────────────────────────────────────────┐
+       │              FIREBASE                   │
+       ├─────────────────────────────────────────┤
+       │ Authentication                          │
+       │ Cloud Firestore                         │
+       │ Security Rules                          │
+       └────────────────────┬────────────────────┘
+                            │
+                            ▼
+                    ┌─────────────────┐
+                    │     LIVEKIT     │
+                    │    WebRTC       │
+                    │  Live Spaces    │
+                    └─────────────────┘
+```
 
 ---
 
-## 🛡️ Role-Based Access
-
-CIE Daily separates platform responsibilities through controlled roles.
-
-| Role | Responsibilities |
-|---|---|
-| 👑 Main Admin | Platform governance, moderation, creator management |
-| ✍️ Creator / CIE Expert | Publish content and host learning Spaces |
-| 🎓 Student | Discover content, join Spaces, connect and chat |
-
-Permissions are enforced through the application and backend security layer.
-
----
-
-# 🏗️ Technology Stack
+# 🛠️ Tech Stack
 
 ### Frontend
 
-- **Flutter**
-- **Dart**
-- **Riverpod**
-- **GoRouter**
+![Flutter](https://img.shields.io/badge/Flutter-02569B?style=for-the-badge\&logo=flutter\&logoColor=white)
+![Dart](https://img.shields.io/badge/Dart-0175C2?style=for-the-badge\&logo=dart\&logoColor=white)
 
-### Backend & Services
+* Flutter
+* Dart
+* Riverpod
+* GoRouter
 
-- **Firebase Authentication**
-- **Cloud Firestore**
-- **LiveKit WebRTC**
+### Backend & Infrastructure
+
+![Firebase](https://img.shields.io/badge/Firebase-FFCA28?style=for-the-badge\&logo=firebase\&logoColor=black)
+![Firestore](https://img.shields.io/badge/Cloud%20Firestore-FFCA28?style=for-the-badge\&logo=firebase\&logoColor=black)
+
+* Firebase Authentication
+* Cloud Firestore
+* Firestore Security Rules
+
+### Real-Time
+
+![WebRTC](https://img.shields.io/badge/WebRTC-333333?style=for-the-badge\&logo=webrtc\&logoColor=white)
+
+* LiveKit
+* WebRTC
+* Real-time audio Spaces
 
 ### Android
 
-- Android App Bundle
-- Gradle Kotlin DSL
-- Production application ID: `com.ciedaily.app`
+![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge\&logo=android\&logoColor=white)
 
----
-
-# 🧠 Architecture
-
-```text
-                         CIE DAILY
-                            │
-                            ▼
-                  ┌──────────────────┐
-                  │   Flutter App    │
-                  └────────┬─────────┘
-                           │
-             ┌─────────────┼─────────────┐
-             ▼             ▼             ▼
-        Riverpod        GoRouter       UI/UX
-             │
-             ▼
-      ┌─────────────────────────┐
-      │     Firebase Layer      │
-      ├─────────────────────────┤
-      │ Authentication          │
-      │ Cloud Firestore         │
-      │ Security Rules          │
-      └─────────────┬───────────┘
-                    │
-                    ▼
-             ┌──────────────┐
-             │   LiveKit    │
-             │   WebRTC     │
-             └──────────────┘
-                    │
-                    ▼
-             Live Audio Spaces
-````
+* Android App Bundle
+* Gradle Kotlin DSL
+* Production application ID: `com.ciedaily.app`
 
 ---
 
@@ -242,143 +290,189 @@ Permissions are enforced through the application and backend security layer.
 ```text
 CIE Daily
 │
-├── Home
+├── 🏠 Home
 │   └── Technology Feed
 │
-├── Discover
-│   └── Technology Reels
+├── 🔎 Discover
+│   └── Interactive Tech Reels
 │
-├── Spaces
+├── 🎙️ Spaces
 │   └── Live Learning Sessions
 │
-├── Chat
+├── 💬 Chat
 │   └── Private Conversations
 │
-└── Profile
+└── 👤 Profile
     └── Identity + Connections
 ```
 
 ---
 
-# 🔐 Security & Access Control
+# 🔐 Role-Based Access
 
-CIE Daily uses role-based access control to separate platform responsibilities.
+CIE Daily separates platform responsibilities through controlled roles.
 
-Key principles include:
+### 👑 Main Admin
 
-* Authenticated application access
-* User-owned profile updates
-* Controlled content publishing
-* Restricted Space hosting
-* Administrative moderation
-* Protected private conversations
-* Backend-enforced Firestore permissions
+Responsible for:
 
----
+* Platform governance
+* Moderation
+* Creator management
+* Content control
+* Space management
+* Administrative permissions
 
-# 🛠️ Development Journey
+### ✍️ Creator / CIE Expert
 
-CIE Daily evolved through continuous iteration.
+Responsible for:
 
-### 04 August
+* Publishing technology content
+* Creating Articles and Reels
+* Hosting learning Spaces
+* Sharing domain expertise
 
-**Ideation & Innovation**
+### 🎓 Student
 
-Defined the problem, product vision, technology-awareness concept, interactive content direction, Spaces concept, and peer discussion idea.
+Can:
 
-### 05 August
-
-**Flutter Environment & Foundation**
-
-Flutter SDK, IDE, Android environment, project structure, initial architecture and development workflow.
-
-### 06 August
-
-**Architecture & Feedback**
-
-Navigation, state management, data requirements, Firebase direction, feature prioritization, and feedback collection.
-
-### 07 August
-
-**Main Development Begins**
-
-Feed, articles, content cards, engagement and initial feature implementation.
-
-### 08 August
-
-**Spaces + Administration**
-
-Real-time Spaces, role architecture, creator/admin controls and security.
-
-### 09–11 August
-
-**Deep UI/UX Refinement**
-
-Spacing, formatting, alignment, Reels, Spaces, screen composition, navigation and architecture refinement.
-
-### 12–14 August
-
-**Private Connections + Chat**
-
-Connection codes, private conversations, real-time messaging and integration.
-
-### 15 August
-
-**Production Refinement**
-
-AMOLED UI, glassmorphism, swipe navigation and Android preparation.
+* Discover technology content
+* Read Articles
+* Watch Reels
+* Join eligible Spaces
+* Create student connections
+* Use private chat
 
 ---
 
-# 🎯 Vision
-
-CIE Daily is not intended to become:
-
-> **"just another news app."**
-
-The vision is to create a platform where an engineering student can:
-
-**Discover → Learn → Explore → Discuss → Grow**
-
-A student opens the app to understand what is happening in technology.
-
-They discover something interesting.
-
-They watch a short explanation.
-
-They find a Space to learn the skill behind it.
-
-They connect with another student.
-
-They discuss what they learned.
-
-And they leave the platform knowing something they didn't know before.
-
----
-
-# 🚀 Future Scope
-
-Potential future directions include:
-
-* Expanded technology categories
-* Larger CIE-led skill-learning programs
-* Personalized content discovery
-* More inter-college learning opportunities
-* Push notifications for technology updates and Spaces
-* Advanced collaboration and content sharing
-* AI-assisted technology summaries
-
----
-
-# 📦 Project Status
-
-CIE Daily has progressed through:
-
-**Concept → Architecture → Feature Development → UI/UX Refinement → Real-Time Features → Android Development → Release Preparation**
-
-The Android application is prepared under:
+# 🧭 User Journey
 
 ```text
+                DISCOVER
+                   │
+                   ▼
+             TECHNOLOGY
+                   │
+          ┌────────┴────────┐
+          ▼                 ▼
+        ARTICLE            REEL
+          │                 │
+          └────────┬────────┘
+                   ▼
+                LEARN
+                   │
+                   ▼
+                SPACE
+                   │
+                   ▼
+               PRACTICE
+                   │
+                   ▼
+               CONNECT
+                   │
+                   ▼
+                DISCUSS
+                   │
+                   ▼
+                  GROW
+```
+
+---
+
+# 🔥 Development Journey
+
+CIE Daily was developed as an iterative product rather than being built in one pass.
+
+| Date          | Phase                                                   |
+| ------------- | ------------------------------------------------------- |
+| **04 Aug**    | 💡 Ideation, innovation & product vision                |
+| **05 Aug**    | 🛠️ Flutter SDK & development environment               |
+| **06 Aug**    | 🏗️ Architecture, feedback & planning                   |
+| **07 Aug**    | 🚀 Main development begins                              |
+| **08 Aug**    | 🎙️ Spaces + Admin / Creator system                     |
+| **09–11 Aug** | 🎨 UI/UX, spacing, alignment, Reels & Spaces refinement |
+| **12–14 Aug** | 💬 Connections + private 1-to-1 chat                    |
+| **15 Aug**    | ✨ Production polish + Android preparation               |
+
+---
+
+# 🎯 Product Philosophy
+
+CIE Daily is intentionally designed **not to be just another news application**.
+
+The larger vision is:
+
+```text
+              DISCOVER
+                  ↓
+               LEARN
+                  ↓
+               EXPLORE
+                  ↓
+              CONNECT
+                  ↓
+              DISCUSS
+                  ↓
+                GROW
+```
+
+A student should be able to open CIE Daily and discover something they did not know before.
+
+Then go one step further:
+
+**Learn it.**
+
+Then:
+
+**Explore it.**
+
+Then:
+
+**Discuss it.**
+
+And eventually:
+
+**Build something with it.**
+
+---
+
+# 🗺️ Future Scope
+
+The platform can evolve toward:
+
+* 🤖 AI-assisted technology summaries
+* 🔔 Technology & Space notifications
+* 🎓 Larger CIE-led learning programs
+* 🌍 Broader inter-college participation
+* 🧠 Personalized technology discovery
+* 🤝 More collaboration features
+* 📚 Expanded skill-learning libraries
+* 📈 Content and learning analytics
+
+---
+
+# 📦 Current Project Status
+
+```text
+✅ Product concept
+✅ Flutter foundation
+✅ Authentication
+✅ Firestore architecture
+✅ Technology feed
+✅ Articles
+✅ Interactive Reels
+✅ Spaces
+✅ Role-based access
+✅ Student connections
+✅ Private 1-to-1 chat
+✅ UI/UX refinement
+✅ Android release preparation
+```
+
+### Android
+
+```text
+Application ID
 com.ciedaily.app
 ```
 
@@ -386,22 +480,61 @@ com.ciedaily.app
 
 # 👨‍💻 Creator
 
-### Manas Vignesh Varma
+<div align="center">
+
+## Manas Vignesh Varma
 
 **Creator & Developer — CIE Daily**
 
-Designed, developed and evolved the CIE Daily concept into a technology-awareness, interactive learning and student communication platform.
+Designed, developed and evolved CIE Daily from an idea for technology awareness into an integrated platform for **technology discovery, interactive learning, skill development and student communication.**
+
+</div>
 
 ---
 
-## ⭐ The Idea Behind CIE Daily
+# ⭐ The Idea
 
-> **Technology changes every day.
-> Students should know about it.
-> They should learn from it.
-> And they should grow with it.**
+<div align="center">
 
-**CIE Daily — Stay updated. Learn more. Grow further.**
+### **Technology changes every day.**
 
-```
-```
+### **Students should know about it.**
+
+### **They should learn from it.**
+
+### **They should grow with it.**
+
+<br />
+
+## **CIE Daily**
+
+### *Discover. Learn. Explore. Discuss. Grow.*
+
+</div>
+
+---
+
+## 📄 Project Documentation
+
+The project documentation includes:
+
+* Product Requirements Document (PRD)
+* Development Record
+* Development Evidence
+* Technical Architecture
+* Feature Requirements
+* Product Evolution
+
+---
+
+<div align="center">
+
+### Built with curiosity.
+
+### Designed for learning.
+
+### Made for the next generation of engineers.
+
+**© 2026 CIE Daily**
+
+</div>
