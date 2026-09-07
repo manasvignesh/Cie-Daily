@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../core/errors/app_exception.dart';
 import '../../../core/errors/error_mapper.dart';
+import '../../../core/utils/role_utils.dart';
 
 class LiveKitTokenService {
   static const String liveKitUrl = 'wss://cie-daily-79ts1icb.livekit.cloud';
@@ -15,10 +16,14 @@ class LiveKitTokenService {
     'LIVEKIT_TOKEN_ENDPOINT',
     defaultValue: '',
   );
-  static const String _temporaryApiKey =
-      String.fromEnvironment('LIVEKIT_API_KEY');
-  static const String _temporaryApiSecret =
-      String.fromEnvironment('LIVEKIT_API_SECRET');
+  static const String _temporaryApiKey = String.fromEnvironment(
+    'LIVEKIT_API_KEY',
+    defaultValue: 'APIRdnqfgkFQ6CP',
+  );
+  static const String _temporaryApiSecret = String.fromEnvironment(
+    'LIVEKIT_API_SECRET',
+    defaultValue: 'vcFGzW6W2NV5qzSdlXtuN2vbFcMytIXyO90sAXV7NQF',
+  );
 
   static Future<String> fetchToken({
     required String spaceId,
@@ -32,7 +37,7 @@ class LiveKitTokenService {
       );
     }
     if (_tokenEndpoint.isEmpty) {
-      return _createTemporaryEmbeddedListenerToken(user, roomName);
+      return _createTemporaryEmbeddedToken(user, roomName);
     }
     if (!_tokenEndpoint.startsWith('https://')) {
       throw const AppException(
@@ -123,7 +128,7 @@ class LiveKitTokenService {
     }
   }
 
-  static String _createTemporaryEmbeddedListenerToken(
+  static String _createTemporaryEmbeddedToken(
     User user,
     String roomName,
   ) {
@@ -136,8 +141,9 @@ class LiveKitTokenService {
       );
     }
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final isHostOrAdmin = canHostLiveSpace(user.email);
     final payload = <String, dynamic>{
-      'exp': now + 300,
+      'exp': now + 3600,
       'nbf': now - 5,
       'iss': _temporaryApiKey,
       'sub': user.uid,
@@ -148,8 +154,8 @@ class LiveKitTokenService {
         'room': roomName,
         'roomJoin': true,
         'canSubscribe': true,
-        'canPublish': false,
-        'canPublishData': false,
+        'canPublish': isHostOrAdmin,
+        'canPublishData': isHostOrAdmin,
       },
     };
     String encode(Object value) =>
@@ -162,7 +168,7 @@ class LiveKitTokenService {
             .bytes)
         .replaceAll('=', '');
     developer.log(
-      'temporary_embedded_token roomName=$roomName identity=${user.uid} ttl=300',
+      'temporary_embedded_token roomName=$roomName identity=${user.uid} canPublish=$isHostOrAdmin ttl=3600',
       name: 'cie_daily.live_spaces',
     );
     return '$unsigned.$signature';
