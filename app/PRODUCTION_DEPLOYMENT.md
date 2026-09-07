@@ -110,5 +110,6 @@ The Gradle release build fails with a clear error when any value is absent.
 
 Direct messages and creator-content publishing require the deployed Supabase
 Edge Functions described in `SUPABASE_NOTIFICATION_BACKEND.md`. Configure
-`CIE_TRUSTED_BACKEND_URL` as a Dart define when building. Do not deploy the
-Firebase notification triggers or upgrade `cie-connect` from Spark for them.
+The app defaults to the deployed CIE Daily Supabase function URL. Override
+`CIE_TRUSTED_BACKEND_URL` as a Dart define only for another environment. Do not
+deploy the Firebase notification triggers or upgrade `cie-connect` from Spark.

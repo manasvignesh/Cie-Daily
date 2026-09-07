@@ -9,7 +9,10 @@ import '../errors/app_exception.dart';
 
 const String trustedBackendBaseUrl = String.fromEnvironment(
   'CIE_TRUSTED_BACKEND_URL',
-  defaultValue: '',
+  // This is a public endpoint, not a credential. Keeping the production URL
+  // as the default prevents otherwise valid APK/AAB builds from silently
+  // shipping with messaging disabled when a Dart define is omitted.
+  defaultValue: 'https://fuvquwhphuheqgfdmtbh.supabase.co/functions/v1',
 );
 
 class TrustedBackendClient {
@@ -110,9 +113,7 @@ class TrustedBackendClient {
   Map<String, dynamic> _decode(String value) {
     try {
       final decoded = jsonDecode(value);
-      return decoded is Map<String, dynamic>
-          ? decoded
-          : <String, dynamic>{};
+      return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
     } catch (_) {
       return <String, dynamic>{};
     }
@@ -140,9 +141,8 @@ class TrustedBackendClient {
       );
     }
     return AppException(
-      code: retryable
-          ? AppErrorCode.serviceUnavailable
-          : AppErrorCode.validation,
+      code:
+          retryable ? AppErrorCode.serviceUnavailable : AppErrorCode.validation,
       userMessage: retryable
           ? 'The service is temporarily unavailable. Please try again.'
           : (body['message'] as String? ??
