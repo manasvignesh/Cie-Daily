@@ -7,9 +7,17 @@ final pendingPostsProvider = StreamProvider<List<PostModel>>((ref) {
       .collection('posts')
       .where('status', isEqualTo: 'pending')
       .orderBy('createdAt', descending: true)
+      .limit(100)
       .snapshots()
       .map((snapshot) => snapshot.docs
-          .map((doc) => PostModel.fromMap(doc.data(), doc.id))
+          .map((doc) {
+            try {
+              return PostModel.fromMap(doc.data(), doc.id);
+            } catch (_) {
+              return null;
+            }
+          })
+          .whereType<PostModel>()
           .toList());
 });
 

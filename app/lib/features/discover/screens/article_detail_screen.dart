@@ -1,139 +1,365 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../core/theme/app_theme.dart';
+import '../../feed/data/firebase_feed_repository.dart';
 import '../../feed/models/post_model.dart';
+import '../../feed/widgets/comments_bottom_sheet.dart';
 import '../../feed/widgets/in_app_share_bottom_sheet.dart';
-import '../../../core/widgets/verified_badge.dart';
+import '../../user/data/firebase_user_repository.dart';
+import '../models/structured_article_model.dart';
+import '../providers/discover_provider.dart';
+import '../widgets/article_components.dart';
 
-class ArticleDetailScreen extends StatelessWidget {
-  final PostModel article;
+class ArticleDetailScreen extends ConsumerStatefulWidget {
+  final String? articleId;
+  final PostModel? initialArticle;
 
-  const ArticleDetailScreen({super.key, required this.article});
+  const ArticleDetailScreen({
+    super.key,
+    this.articleId,
+    this.initialArticle,
+  });
+
+  @override
+  ConsumerState<ArticleDetailScreen> createState() =>
+      _ArticleDetailScreenState();
+}
+
+class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
+  double _readingProgress = 0.0;
+  bool? _isSaved;
+  bool _saving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialArticle != null) {
+      _isSaved = widget.initialArticle!.isBookmarkedByCurrentUser;
+    }
+  }
+
+  Future<void> _toggleSaved(PostModel article) async {
+    if (_saving) return;
+    if (FirebaseAuth.instance.currentUser == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sign in to save this article.')),
+      );
+      return;
+    }
+    final current = _isSaved ?? article.isBookmarkedByCurrentUser;
+    final next = !current;
+    setState(() {
+      _isSaved = next;
+      _saving = true;
+    });
+    try {
+      await ref.read(feedRepositoryProvider).toggleBookmark(article.id, next);
+    } catch (_) {
+      if (mounted) setState(() => _isSaved = current);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  bool _trackReadingProgress(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical) return false;
+    final max = notification.metrics.maxScrollExtent;
+    final next =
+        max <= 0 ? 0.0 : (notification.metrics.pixels / max).clamp(0.0, 1.0);
+    if ((next - _readingProgress).abs() > 0.01) {
+      setState(() => _readingProgress = next);
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final id = widget.articleId ?? widget.initialArticle?.id;
+    if (id == null || id.isEmpty) return _buildUnavailableState(context);
+    final articleAsync = ref.watch(discoverArticleByIdProvider(id));
+
+    return articleAsync.when(
+      data: (found) {
+        if (found == null) {
+          return _buildUnavailableState(context);
+        }
+        return _buildArticleContent(context, found);
+      },
+      loading: () => Scaffold(
+        backgroundColor: AppTheme.backgroundColor(context),
+        body: const Center(
+            child: CircularProgressIndicator(color: AppTheme.primaryOrange)),
+      ),
+      error: (_, __) => _buildUnavailableState(context),
+    );
+  }
+
+  Widget _buildArticleContent(BuildContext context, PostModel articlePost) {
+    final structuredData = StructuredArticleData.fromPostModel(articlePost);
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final isSelf = currentUserId != null &&
+        structuredData.authorId != null &&
+        currentUserId == structuredData.authorId;
+    final isFollowing = structuredData.authorId != null && !isSelf
+        ? ref.watch(isFollowingProvider(structuredData.authorId!))
+        : false;
+
+    final primaryText = AppTheme.primaryTextColor(context);
+    final isSaved = _isSaved ?? articlePost.isBookmarkedByCurrentUser;
+
     return Scaffold(
+      backgroundColor: AppTheme.backgroundColor(context),
       appBar: AppBar(
-        title: const Text('Article'),
+        backgroundColor: AppTheme.backgroundColor(context),
+        foregroundColor: primaryText,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
+        ),
         actions: [
+          IconButton(
+            onPressed: () => _toggleSaved(articlePost),
+            tooltip: isSaved ? 'Remove bookmark' : 'Bookmark',
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              child: Icon(
+                isSaved
+                    ? Icons.bookmark_rounded
+                    : Icons.bookmark_border_rounded,
+                key: ValueKey(isSaved),
+                color: isSaved ? AppTheme.primaryOrange : primaryText,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: () => InAppShareBottomSheet.show(context, articlePost),
+            tooltip: 'Share',
+            icon: Icon(Icons.ios_share_rounded, color: primaryText),
+          ),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
+            icon: Icon(Icons.more_horiz_rounded, color: primaryText),
             tooltip: 'Options',
             onSelected: (value) {
               if (value == 'share') {
-                InAppShareBottomSheet.show(context, article);
+                InAppShareBottomSheet.show(context, articlePost);
+              } else if (value == 'discuss') {
+                CommentsBottomSheet.show(context, articlePost.id);
               }
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'discuss',
+                child: Row(
+                  children: [
+                    Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                    SizedBox(width: 10),
+                    Text('Discuss this article'),
+                  ],
+                ),
+              ),
+              PopupMenuItem(
                 value: 'share',
                 child: Row(
                   children: [
                     Icon(Icons.send_rounded, size: 18),
                     SizedBox(width: 10),
-                    Text('Share In-App'),
+                    Text('Share with connections'),
                   ],
                 ),
               ),
             ],
           ),
         ],
+        // Reading Progress Line
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(2),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: FractionallySizedBox(
+              widthFactor: _readingProgress,
+              child: Container(height: 2, color: AppTheme.primaryOrange),
+            ),
+          ),
+        ),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (article.imageUrl != null)
-              Image.network(
-                article.imageUrl!,
-                width: double.infinity,
-                height: 250,
-                fit: BoxFit.cover,
-              ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    article.title,
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        backgroundImage: article.authorAvatar != null
-                            ? NetworkImage(article.authorAvatar!)
-                            : null,
-                        child: article.authorAvatar == null
-                            ? Text(article.authorName.isNotEmpty
-                                ? article.authorName[0].toUpperCase()
-                                : 'A')
-                            : null,
-                      ),
-                      const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Text(
-                                article.authorName,
-                                style: const TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                              if (article.isAuthorVerified)
-                                const VerifiedBadge(size: 15),
-                            ],
-                          ),
-                          Text(
-                            '${article.estimatedReadTime} min read',
-                            style: const TextStyle(color: Colors.grey, fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  // Render the article content blocks
-                  ...article.blocks.map((block) {
-                    if (block is Map<String, dynamic>) {
-                      final type = block['type'];
-                      final content = block['content'];
-                      if (type == 'text' && content != null) {
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 16.0),
-                          child: Text(
-                            content.toString(),
-                            style: const TextStyle(fontSize: 16, height: 1.6),
-                          ),
-                        );
-                      }
-                    }
-                    return const SizedBox.shrink();
-                  }),
-
-                  const SizedBox(height: 32),
-
-                  // Bottom Share Action Button
-                  Center(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                      ),
-                      onPressed: () {
-                        InAppShareBottomSheet.show(context, article);
+      body: Column(
+        children: [
+          Expanded(
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _trackReadingProgress,
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 1. HERO SECTION
+                    ArticleHeroSection(
+                      article: structuredData,
+                      isSelf: isSelf,
+                      isFollowing: isFollowing,
+                      onFollow: () {
+                        if (currentUserId != null &&
+                            structuredData.authorId != null) {
+                          ref.read(userRepositoryProvider).toggleFollowUser(
+                                currentUserId: currentUserId,
+                                targetUserId: structuredData.authorId!,
+                                follow: !isFollowing,
+                              );
+                        }
                       },
-                      icon: const Icon(Icons.send_rounded, size: 18),
-                      label: const Text('Share Article with Connections'),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                    const SizedBox(height: 20),
+
+                    // 2. IN 20 SECONDS SUMMARY
+                    if (structuredData.in20SecondsSummary.isNotEmpty) ...[
+                      In20SecondsCard(text: structuredData.in20SecondsSummary),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // 3. KEY NUMBERS
+                    KeyNumbersRow(numbers: structuredData.keyNumbers),
+                    const SizedBox(height: 20),
+
+                    // 4. WHY THIS MATTERS
+                    if (structuredData.whyItMatters.isNotEmpty) ...[
+                      WhyThisMattersSection(text: structuredData.whyItMatters),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // 5. EXPLORE THE STORY
+                    ExploreTheStorySection(
+                        items: structuredData.exploreSections),
+                    const SizedBox(height: 20),
+
+                    // 6. QUOTE
+                    if (structuredData.quoteText != null) ...[
+                      EditorialQuoteWidget(
+                        quote: structuredData.quoteText!,
+                        speaker: structuredData.quoteSpeaker ?? '',
+                        role: structuredData.quoteRole ?? '',
+                      ),
+                      const SizedBox(height: 20),
+                    ],
+
+                    // 7. YOU NOW KNOW
+                    if (structuredData.takeaways.isNotEmpty)
+                      YouNowKnowWidget(takeaways: structuredData.takeaways),
+                    const SizedBox(height: 28),
+                  ],
+                ),
               ),
             ),
-          ],
+          ),
+
+          // 8. STICKY BOTTOM ACTION BAR
+          ArticleBottomActionBar(
+            isSaved: isSaved,
+            isFollowing: isFollowing,
+            onSave: () => _toggleSaved(articlePost),
+            onDiscuss: () => CommentsBottomSheet.show(context, articlePost.id),
+            onShare: () => InAppShareBottomSheet.show(context, articlePost),
+            onFollow: () {
+              if (currentUserId != null && structuredData.authorId != null) {
+                ref.read(userRepositoryProvider).toggleFollowUser(
+                      currentUserId: currentUserId,
+                      targetUserId: structuredData.authorId!,
+                      follow: !isFollowing,
+                    );
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnavailableState(BuildContext context) {
+    final primaryText = AppTheme.primaryTextColor(context);
+    final secondaryText = AppTheme.secondaryTextColor(context);
+
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor(context),
+      appBar: AppBar(
+        backgroundColor: AppTheme.backgroundColor(context),
+        foregroundColor: primaryText,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
+          onPressed: () {
+            if (context.canPop()) {
+              context.pop();
+            } else {
+              context.go('/home');
+            }
+          },
+        ),
+      ),
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryOrange.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.article_outlined,
+                    size: 40, color: AppTheme.primaryOrange),
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'Article unavailable',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: primaryText,
+                  fontFamily: 'Outfit',
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'This story may have been removed or is no longer available.',
+                style: TextStyle(
+                    fontSize: 14, color: secondaryText, fontFamily: 'Inter'),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+              ElevatedButton(
+                onPressed: () => context.go('/home'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryOrange,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
+                ),
+                child: const Text(
+                  'Back to Discover',
+                  style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      fontFamily: 'Outfit'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

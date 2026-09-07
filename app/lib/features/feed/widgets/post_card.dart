@@ -1,7 +1,10 @@
-import 'dart:ui';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:go_router/go_router.dart';
+import '../../user/data/firebase_user_repository.dart';
 import '../models/post_model.dart';
 import '../../../core/widgets/data_display/app_avatar.dart';
 import '../../../core/widgets/verified_badge.dart';
@@ -12,7 +15,7 @@ import '../../../core/theme/responsive.dart';
 ///  - 9:16  → TRUE FULLSCREEN  (video/image fills entire screen; UI overlays on top)
 ///  - 4:5   → PORTRAIT CARD    (media fills top of screen at 4:5 ratio; metadata below)
 /// All other aspect ratios are displayed in 4:5 mode (cropped via BoxFit.cover).
-class PostCard extends StatefulWidget {
+class PostCard extends ConsumerStatefulWidget {
   final PostModel post;
   final bool isVisible;
   final ValueChanged<bool> onLike;
@@ -31,16 +34,15 @@ class PostCard extends StatefulWidget {
   });
 
   @override
-  State<PostCard> createState() => _PostCardState();
+  ConsumerState<PostCard> createState() => _PostCardState();
 }
 
-class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
+class _PostCardState extends ConsumerState<PostCard>
+    with TickerProviderStateMixin {
   bool _isLiked = false;
   bool _isBookmarked = false;
-  bool _isFollowing = false;
   late int _likesCount;
   VideoPlayerController? _videoController;
-  bool _isVideoInitializing = false;
   bool _showPlayPauseOverlay = false;
 
   // Heart animation
@@ -62,19 +64,31 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     _isLiked = widget.post.isLikedByCurrentUser;
     _isBookmarked = widget.post.isBookmarkedByCurrentUser;
 
-    _heartCtrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 700));
+    _heartCtrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 600));
     _heartScale = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.35).chain(CurveTween(curve: Curves.easeOutBack)), weight: 40),
-      TweenSequenceItem(tween: Tween(begin: 1.35, end: 1.05).chain(CurveTween(curve: Curves.easeInOut)), weight: 20),
-      TweenSequenceItem(tween: Tween(begin: 1.05, end: 0.0).chain(CurveTween(curve: Curves.easeIn)), weight: 40),
+      TweenSequenceItem(
+          tween: Tween(begin: 0.0, end: 1.2)
+              .chain(CurveTween(curve: Curves.easeOutBack)),
+          weight: 40),
+      TweenSequenceItem(
+          tween: Tween(begin: 1.2, end: 1.0)
+              .chain(CurveTween(curve: Curves.easeInOut)),
+          weight: 20),
+      TweenSequenceItem(
+          tween: Tween(begin: 1.0, end: 0.0)
+              .chain(CurveTween(curve: Curves.easeInQuad)),
+          weight: 40),
     ]).animate(_heartCtrl);
     _heartOpacity = TweenSequence<double>([
-      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 15),
-      TweenSequenceItem(tween: ConstantTween(1.0), weight: 55),
+      TweenSequenceItem(tween: Tween(begin: 0.0, end: 1.0), weight: 10),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 60),
       TweenSequenceItem(tween: Tween(begin: 1.0, end: 0.0), weight: 30),
     ]).animate(_heartCtrl);
 
-    _vinylCtrl = AnimationController(vsync: this, duration: const Duration(seconds: 6))..repeat();
+    _vinylCtrl =
+        AnimationController(vsync: this, duration: const Duration(seconds: 6))
+          ..repeat();
 
     _initVideo();
   }
@@ -82,7 +96,6 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   void _initVideo() {
     final url = widget.post.videoUrl;
     if (url != null && url.isNotEmpty) {
-      _isVideoInitializing = true;
       _videoController?.dispose();
       _videoController = VideoPlayerController.networkUrl(
         Uri.parse(url),
@@ -94,14 +107,12 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
             if (widget.isVisible) {
               _videoController?.play();
             }
-            setState(() {
-              _isVideoInitializing = false;
-            });
+            setState(() {});
           }
         }).catchError((err) {
           debugPrint('Video init error for post ${widget.post.id}: $err');
           if (mounted) {
-            setState(() => _isVideoInitializing = false);
+            setState(() {});
           }
         });
     }
@@ -118,16 +129,20 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(PostCard old) {
     super.didUpdateWidget(old);
-    if (old.post.id != widget.post.id || old.post.videoUrl != widget.post.videoUrl) {
+    if (old.post.id != widget.post.id ||
+        old.post.videoUrl != widget.post.videoUrl) {
       _videoController?.dispose();
       _videoController = null;
       _initVideo();
     }
-    if (old.post.id != widget.post.id || old.post.isLikedByCurrentUser != widget.post.isLikedByCurrentUser) {
+    if (old.post.id != widget.post.id ||
+        old.post.isLikedByCurrentUser != widget.post.isLikedByCurrentUser) {
       _isLiked = widget.post.isLikedByCurrentUser;
       _likesCount = widget.post.upvotes;
     }
-    if (old.post.id != widget.post.id || old.post.isBookmarkedByCurrentUser != widget.post.isBookmarkedByCurrentUser) {
+    if (old.post.id != widget.post.id ||
+        old.post.isBookmarkedByCurrentUser !=
+            widget.post.isBookmarkedByCurrentUser) {
       _isBookmarked = widget.post.isBookmarkedByCurrentUser;
     }
     if (old.isVisible != widget.isVisible) {
@@ -142,7 +157,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   }
 
   void _togglePlayPause() {
-    if (_videoController == null || !_videoController!.value.isInitialized) return;
+    if (_videoController == null || !_videoController!.value.isInitialized) {
+      return;
+    }
     if (_videoController!.value.isPlaying) {
       _videoController!.pause();
     } else {
@@ -177,7 +194,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     widget.onBookmark(_isBookmarked);
   }
 
-  bool get _isFullscreen => widget.post.aspectRatio == '9:16' || widget.post.aspectRatio == null;
+  bool get _isFullscreen =>
+      widget.post.aspectRatio == '9:16' || widget.post.aspectRatio == null;
 
   String _timeAgo(DateTime dt) {
     final d = DateTime.now().difference(dt);
@@ -200,7 +218,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
     if (url == null || url.isEmpty) {
       if (widget.post.imageUrl != null) {
-        return Image.network(widget.post.imageUrl!, fit: fit, width: double.infinity, height: double.infinity);
+        return Image.network(widget.post.imageUrl!,
+            fit: fit, width: double.infinity, height: double.infinity);
       }
       final hue = (widget.post.id.hashCode % 360).abs().toDouble();
       return Container(
@@ -221,7 +240,8 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       return Container(
         color: Colors.black,
         child: const Center(
-          child: CircularProgressIndicator(color: Colors.orange, strokeWidth: 2.5),
+          child:
+              CircularProgressIndicator(color: Colors.orange, strokeWidth: 2.5),
         ),
       );
     }
@@ -260,7 +280,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                       border: Border.all(color: Colors.white24, width: 1.5),
                     ),
                     child: Icon(
-                      value.isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+                      value.isPlaying
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
                       color: Colors.white,
                       size: 48,
                     ),
@@ -280,7 +302,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
   // ──────────────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
-    return _buildFullscreen(context);
+    return _isFullscreen ? _buildFullscreen(context) : _build45(context);
   }
 
   // ──────────────────────────────────────────────────────────────────────────
@@ -304,14 +326,20 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
           // Bottom scrim gradient
           Positioned(
-            bottom: 0, left: 0, right: 0, height: 420,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 420,
             child: IgnorePointer(
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withOpacity(0.85)],
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.85)
+                    ],
                   ),
                 ),
               ),
@@ -320,14 +348,20 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
           // Top scrim gradient for subtle header shadow
           Positioned(
-            top: 0, left: 0, right: 0, height: 120,
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 120,
             child: IgnorePointer(
               child: Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.black.withOpacity(0.4), Colors.transparent],
+                    colors: [
+                      Colors.black.withValues(alpha: 0.4),
+                      Colors.transparent
+                    ],
                   ),
                 ),
               ),
@@ -378,9 +412,12 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                   fit: StackFit.expand,
                   children: [
                     _buildMedia(fit: BoxFit.cover),
-                    if (_videoController != null && _videoController!.value.isInitialized)
+                    if (_videoController != null &&
+                        _videoController!.value.isInitialized)
                       Positioned(
-                        bottom: 0, left: 0, right: 0,
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
                         child: _buildVideoProgressBar(),
                       ),
                   ],
@@ -426,77 +463,132 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
   Widget _buildAuthorRow(BuildContext context, {required bool topBar}) {
     final post = widget.post;
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    final followingSet = ref.watch(userFollowingProvider).value ?? {};
+    final isFollowing =
+        post.authorId != null && followingSet.contains(post.authorId);
+    final isSelf = currentUserId != null &&
+        post.authorId != null &&
+        currentUserId == post.authorId;
+
     return Padding(
       padding: const EdgeInsets.only(right: 8.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Story-ring avatar
-          _StoryRingAvatar(imageUrl: post.authorAvatar, fallback: post.authorName.isNotEmpty ? post.authorName[0] : 'A', radius: topBar ? 18 : 17),
+          GestureDetector(
+            onTap: () {
+              if (post.authorId != null && post.authorId!.isNotEmpty) {
+                context.push('/profile/${post.authorId}');
+              }
+            },
+            child: _StoryRingAvatar(
+                imageUrl: post.authorAvatar,
+                fallback: post.authorName.isNotEmpty ? post.authorName[0] : 'A',
+                radius: topBar ? 18 : 17),
+          ),
           const SizedBox(width: 10),
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        post.authorName,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+            child: GestureDetector(
+              onTap: () {
+                if (post.authorId != null && post.authorId!.isNotEmpty) {
+                  context.push('/profile/${post.authorId}');
+                }
+              },
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          post.authorName,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w800,
+                            fontFamily: 'Inter',
+                            fontSize: 14.5,
+                            shadows: [
+                              Shadow(color: Colors.black54, blurRadius: 4)
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                    if (post.isAuthorVerified || isVerifiedUser(post.authorEmail))
-                      const VerifiedBadge(size: 15),
-                    if (topBar) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        '• ${_timeAgo(post.createdAt)}',
-                        style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12, shadows: const [Shadow(color: Colors.black, blurRadius: 4)]),
-                      ),
+                      if (post.isAuthorVerified ||
+                          isVerifiedUser(post.authorEmail))
+                        const VerifiedBadge(size: 15),
+                      if (topBar) ...[
+                        const SizedBox(width: 6),
+                        Text(
+                          '• ${_timeAgo(post.createdAt)}',
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 12,
+                              fontFamily: 'Inter',
+                              shadows: const [
+                                Shadow(color: Colors.black54, blurRadius: 4)
+                              ]),
+                        ),
+                      ],
                     ],
-                  ],
-                ),
-                if (!topBar)
-                  Text(
-                    _timeAgo(post.createdAt),
-                    style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
                   ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 10),
-          // Follow button
-          GestureDetector(
-            onTap: () => setState(() => _isFollowing = !_isFollowing),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
-              decoration: BoxDecoration(
-                color: _isFollowing ? Colors.white.withOpacity(0.12) : Colors.transparent,
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: _isFollowing ? Colors.white.withOpacity(0.4) : Colors.white.withOpacity(0.9),
-                  width: 1.2,
-                ),
-              ),
-              child: Text(
-                _isFollowing ? 'Following' : 'Follow',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
-                  fontWeight: _isFollowing ? FontWeight.w500 : FontWeight.w700,
-                ),
+                  if (!topBar)
+                    Text(
+                      _timeAgo(post.createdAt),
+                      style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.5),
+                          fontSize: 12,
+                          fontFamily: 'Inter'),
+                    ),
+                ],
               ),
             ),
           ),
+          if (!isSelf &&
+              post.authorId != null &&
+              post.authorId!.isNotEmpty) ...[
+            const SizedBox(width: 10),
+            // Follow button
+            GestureDetector(
+              onTap: () {
+                if (currentUserId != null && post.authorId != null) {
+                  ref.read(userRepositoryProvider).toggleFollowUser(
+                        currentUserId: currentUserId,
+                        targetUserId: post.authorId!,
+                        follow: !isFollowing,
+                      );
+                }
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 220),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+                decoration: BoxDecoration(
+                  color: isFollowing
+                      ? Colors.white.withValues(alpha: 0.12)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: isFollowing
+                        ? Colors.white.withValues(alpha: 0.4)
+                        : Colors.white.withValues(alpha: 0.9),
+                    width: 1.2,
+                  ),
+                ),
+                child: Text(
+                  isFollowing ? 'Following' : 'Follow',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: isFollowing ? FontWeight.w500 : FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -519,8 +611,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
             color: Colors.white,
             fontSize: 14.5,
             fontWeight: FontWeight.bold,
+            fontFamily: 'Inter',
             height: 1.2,
-            shadows: [Shadow(color: Colors.black, blurRadius: 6)],
+            shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
           ),
         ),
         const SizedBox(height: 4),
@@ -535,7 +628,9 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     final blocks = widget.post.blocks;
     String text = '';
     for (final b in blocks) {
-      if (b is Map<String, dynamic> && b['type'] == 'text' && b['content'] != null) {
+      if (b is Map<String, dynamic> &&
+          b['type'] == 'text' &&
+          b['content'] != null) {
         text = b['content'].toString();
         break;
       }
@@ -545,17 +640,20 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
     return GestureDetector(
       onTap: () => setState(() => _captionExpanded = !_captionExpanded),
       child: AnimatedSize(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOutCubic,
         child: RichText(
           maxLines: _captionExpanded ? null : 1,
-          overflow: _captionExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+          overflow:
+              _captionExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
           text: TextSpan(
             children: [
               TextSpan(
                 text: text,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.85),
-                  fontSize: 12.5,
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 13,
+                  fontFamily: 'Inter',
                   height: 1.35,
                   shadows: const [Shadow(color: Colors.black87, blurRadius: 4)],
                 ),
@@ -563,7 +661,11 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
               if (!_captionExpanded)
                 TextSpan(
                   text: ' more',
-                  style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12.5, fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.5),
+                      fontSize: 13,
+                      fontFamily: 'Inter',
+                      fontWeight: FontWeight.w600),
                 ),
             ],
           ),
@@ -574,25 +676,32 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
   Widget _buildMusicTicker() {
     final post = widget.post;
-    final audioText = '♪  Original audio · ${post.authorName}   •   ♪  Original audio · ${post.authorName}   •   ';
+    final audioText =
+        '♪  Original audio · ${post.authorName}   •   ♪  Original audio · ${post.authorName}   •   ';
     return Row(
       children: [
         // Spinning vinyl
         AnimatedBuilder(
           animation: _vinylCtrl,
-          builder: (_, child) => Transform.rotate(angle: _vinylCtrl.value * 2 * math.pi, child: child),
+          builder: (_, child) => Transform.rotate(
+              angle: _vinylCtrl.value * 2 * math.pi, child: child),
           child: Container(
-            width: 32, height: 32,
+            width: 32,
+            height: 32,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: const RadialGradient(
-                colors: [Color(0xFF3A3A3A), Color(0xFF101010)],
+                colors: [Color(0xFF242430), Color(0xFF13131C)],
                 stops: [0.35, 1.0],
               ),
-              border: Border.all(color: Colors.white24, width: 1),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 8)],
+              border: Border.all(color: Colors.white12, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.5), blurRadius: 8)
+              ],
             ),
-            child: const Icon(Icons.music_note_rounded, color: Colors.white, size: 15),
+            child: const Icon(Icons.music_note_rounded,
+                color: Colors.white70, size: 16),
           ),
         ),
         const SizedBox(width: 10),
@@ -601,7 +710,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
             child: _MarqueeText(
               text: audioText,
               style: TextStyle(
-                color: Colors.white.withOpacity(0.8),
+                color: Colors.white.withValues(alpha: 0.8),
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 shadows: const [Shadow(color: Colors.black, blurRadius: 3)],
@@ -619,41 +728,55 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       mainAxisSize: MainAxisSize.min,
       children: [
         _ActionBtn(
-          icon: _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-          iconColor: _isLiked ? const Color(0xFFFF3B5C) : Colors.white,
+          icon:
+              _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+          iconColor: _isLiked ? const Color(0xFFFF5A1F) : Colors.white,
           label: _fmt(_likesCount),
           onTap: _handleLike,
           isActive: _isLiked,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
         _ActionBtn(
           icon: Icons.chat_bubble_rounded,
           label: _fmt(post.commentCount),
           onTap: widget.onComment,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
         _ActionBtn(
           icon: Icons.reply_rounded,
           label: _fmt(0),
           onTap: widget.onShare,
           mirrorIcon: true,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
         _ActionBtn(
-          icon: _isBookmarked ? Icons.bookmark_rounded : Icons.bookmark_border_rounded,
-          iconColor: _isBookmarked ? const Color(0xFFFFD700) : Colors.white,
+          icon: _isBookmarked
+              ? Icons.bookmark_rounded
+              : Icons.bookmark_border_rounded,
+          iconColor: _isBookmarked ? const Color(0xFFFF5A1F) : Colors.white,
           label: 'Save',
           onTap: _handleBookmark,
           isActive: _isBookmarked,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 18),
         GestureDetector(
           onTap: () => _showMoreSheet(context),
           child: Column(
             children: [
-              const Icon(Icons.more_horiz_rounded, color: Colors.white, size: 24, shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
+              const Icon(Icons.more_horiz_rounded,
+                  color: Colors.white,
+                  size: 24,
+                  shadows: [Shadow(color: Colors.black54, blurRadius: 4)]),
               const SizedBox(height: 4),
-              Text('More', style: TextStyle(color: Colors.white.withOpacity(0.85), fontSize: 11.5, fontWeight: FontWeight.w500, shadows: const [Shadow(color: Colors.black, blurRadius: 4)])),
+              Text('More',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 11.5,
+                      fontFamily: 'Inter',
+                      fontWeight: FontWeight.w500,
+                      shadows: const [
+                        Shadow(color: Colors.black54, blurRadius: 3)
+                      ])),
             ],
           ),
         ),
@@ -663,7 +786,10 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
 
   Widget _buildVideoProgressBar() {
     return Positioned(
-      top: 0, left: 0, right: 0, height: 2,
+      top: 0,
+      left: 0,
+      right: 0,
+      height: 2,
       child: ValueListenableBuilder(
         valueListenable: _videoController!,
         builder: (_, v, __) {
@@ -671,7 +797,7 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
           final dur = v.duration.inMilliseconds.toDouble();
           return LinearProgressIndicator(
             value: dur > 0 ? (pos / dur).clamp(0.0, 1.0) : 0.0,
-            backgroundColor: Colors.white.withOpacity(0.18),
+            backgroundColor: Colors.white.withValues(alpha: 0.18),
             valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
             minHeight: 2,
           );
@@ -694,13 +820,20 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
                   alignment: Alignment.center,
                   children: [
                     Container(
-                      width: 150, height: 150,
+                      width: 150,
+                      height: 150,
                       decoration: const BoxDecoration(
                         shape: BoxShape.circle,
-                        boxShadow: [BoxShadow(color: Color(0x88FF3B5C), blurRadius: 70, spreadRadius: 20)],
+                        boxShadow: [
+                          BoxShadow(
+                              color: Color(0x88FF3B5C),
+                              blurRadius: 70,
+                              spreadRadius: 20)
+                        ],
                       ),
                     ),
-                    const Icon(Icons.favorite_rounded, color: Colors.white, size: 105),
+                    const Icon(Icons.favorite_rounded,
+                        color: Colors.white, size: 105),
                   ],
                 ),
               ),
@@ -717,15 +850,27 @@ class _PostCardState extends State<PostCard> with TickerProviderStateMixin {
       backgroundColor: Colors.transparent,
       builder: (_) => Container(
         margin: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(
+            color: const Color(0xFF1C1C1E),
+            borderRadius: BorderRadius.circular(20)),
         child: SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-              _SheetTile(icon: Icons.flag_rounded, label: 'Report', color: Colors.redAccent),
-              _SheetTile(icon: Icons.not_interested_rounded, label: 'Not Interested'),
-              _SheetTile(icon: Icons.link_rounded, label: 'Copy Link'),
+              Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.symmetric(vertical: 12),
+                  decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2))),
+              const _SheetTile(
+                  icon: Icons.flag_rounded,
+                  label: 'Report',
+                  color: Colors.redAccent),
+              const _SheetTile(
+                  icon: Icons.not_interested_rounded, label: 'Not Interested'),
+              const _SheetTile(icon: Icons.link_rounded, label: 'Copy Link'),
               const SizedBox(height: 8),
             ],
           ),
@@ -744,7 +889,8 @@ class _StoryRingAvatar extends StatelessWidget {
   final String fallback;
   final double radius;
 
-  const _StoryRingAvatar({required this.imageUrl, required this.fallback, required this.radius});
+  const _StoryRingAvatar(
+      {required this.imageUrl, required this.fallback, required this.radius});
 
   @override
   Widget build(BuildContext context) {
@@ -753,14 +899,22 @@ class _StoryRingAvatar extends StatelessWidget {
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
         gradient: SweepGradient(
-          colors: [Color(0xFFFBAA3B), Color(0xFFE1306C), Color(0xFF833AB4), Color(0xFF405DE6), Color(0xFFFBAA3B)],
+          colors: [
+            Color(0xFFFBAA3B),
+            Color(0xFFE1306C),
+            Color(0xFF833AB4),
+            Color(0xFF405DE6),
+            Color(0xFFFBAA3B)
+          ],
           stops: [0.0, 0.25, 0.5, 0.75, 1.0],
         ),
       ),
       child: Container(
         padding: const EdgeInsets.all(2),
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF080808)),
-        child: AppAvatar(imageUrl: imageUrl, radius: radius, fallbackText: fallback),
+        decoration: const BoxDecoration(
+            shape: BoxShape.circle, color: Color(0xFF080808)),
+        child: AppAvatar(
+            imageUrl: imageUrl, radius: radius, fallbackText: fallback),
       ),
     );
   }
@@ -787,60 +941,85 @@ class _ActionBtn extends StatefulWidget {
   State<_ActionBtn> createState() => _ActionBtnState();
 }
 
-class _ActionBtnState extends State<_ActionBtn> with SingleTickerProviderStateMixin {
+class _ActionBtnState extends State<_ActionBtn>
+    with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double> _scale;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 110));
-    _scale = Tween(begin: 1.0, end: 0.78).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+    _ctrl = AnimationController(
+        vsync: this, duration: const Duration(milliseconds: 110));
+    _scale = Tween(begin: 1.0, end: 0.78)
+        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _ctrl.forward(),
-      onTapUp: (_) { _ctrl.reverse(); widget.onTap(); },
-      onTapCancel: () => _ctrl.reverse(),
-      child: ScaleTransition(
-        scale: _scale,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Transform(
-              alignment: Alignment.center,
-              transform: widget.mirrorIcon ? Matrix4.rotationY(math.pi) : Matrix4.identity(),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 220),
-                transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-                child: Icon(
-                  widget.icon,
-                  key: ValueKey(widget.isActive),
-                  color: widget.iconColor,
-                  size: 30,
-                  shadows: [
-                    if (widget.isActive) Shadow(color: widget.iconColor.withOpacity(0.6), blurRadius: 12),
-                    const Shadow(color: Colors.black87, blurRadius: 6),
-                  ],
+    return Semantics(
+      button: true,
+      label: widget.label,
+      selected: widget.isActive,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _ctrl.forward(),
+        onTapUp: (_) {
+          _ctrl.reverse();
+          widget.onTap();
+        },
+        onTapCancel: () => _ctrl.reverse(),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+          child: ScaleTransition(
+            scale: _scale,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Transform(
+                  alignment: Alignment.center,
+                  transform: widget.mirrorIcon
+                      ? Matrix4.rotationY(math.pi)
+                      : Matrix4.identity(),
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    transitionBuilder: (child, anim) =>
+                        ScaleTransition(scale: anim, child: child),
+                    child: Icon(
+                      widget.icon,
+                      key: ValueKey(widget.isActive),
+                      color: widget.iconColor,
+                      size: 24,
+                      shadows: [
+                        if (widget.isActive)
+                          Shadow(
+                              color: widget.iconColor.withValues(alpha: 0.6),
+                              blurRadius: 12),
+                        const Shadow(color: Colors.black87, blurRadius: 4),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 4),
+                Text(
+                  widget.label,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12.5,
+                    fontFamily: 'Inter',
+                    fontWeight: FontWeight.w700,
+                    shadows: [Shadow(color: Colors.black54, blurRadius: 4)],
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 4),
-            Text(
-              widget.label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 12.5,
-                fontWeight: FontWeight.w700,
-                shadows: [Shadow(color: Colors.black, blurRadius: 5)],
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -856,22 +1035,31 @@ class _MarqueeText extends StatefulWidget {
   State<_MarqueeText> createState() => _MarqueeTextState();
 }
 
-class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
+class _MarqueeTextState extends State<_MarqueeText>
+    with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 10))..repeat();
+    _ctrl =
+        AnimationController(vsync: this, duration: const Duration(seconds: 10))
+          ..repeat();
   }
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, constraints) {
-      final tp = TextPainter(text: TextSpan(text: widget.text, style: widget.style), textDirection: TextDirection.ltr)..layout();
+      final tp = TextPainter(
+          text: TextSpan(text: widget.text, style: widget.style),
+          textDirection: TextDirection.ltr)
+        ..layout();
       return AnimatedBuilder(
         animation: _ctrl,
         builder: (_, __) => SingleChildScrollView(
@@ -879,7 +1067,8 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
           physics: const NeverScrollableScrollPhysics(),
           child: Transform.translate(
             offset: Offset(-_ctrl.value * tp.width, 0),
-            child: Text(widget.text + widget.text, style: widget.style, maxLines: 1),
+            child: Text(widget.text + widget.text,
+                style: widget.style, maxLines: 1),
           ),
         ),
       );
@@ -898,8 +1087,12 @@ class _SheetTile extends StatelessWidget {
     final c = color ?? Colors.white;
     return ListTile(
       leading: Icon(icon, color: c, size: 22),
-      title: Text(label, style: TextStyle(color: c, fontSize: 15, fontWeight: FontWeight.w500)),
-      trailing: color == null ? const Icon(Icons.chevron_right_rounded, color: Color(0xFF444444)) : null,
+      title: Text(label,
+          style:
+              TextStyle(color: c, fontSize: 15, fontWeight: FontWeight.w500)),
+      trailing: color == null
+          ? const Icon(Icons.chevron_right_rounded, color: Color(0xFF444444))
+          : null,
       onTap: () => Navigator.pop(context),
     );
   }

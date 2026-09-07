@@ -8,4 +8,12 @@ abstract interface class UserRepository {
   });
 
   Future<Map<String, dynamic>?> getUserProfile(String uid);
+
+  Future<String> ensureConnectionCode(String uid);
+
+  Future<void> toggleFollowUser({
+    required String currentUserId,
+    required String targetUserId,
+    required bool follow,
+  });
 }

@@ -7,13 +7,13 @@ import 'package:video_player/video_player.dart';
 import '../../../core/services/cloudinary_service.dart';
 import '../models/post_model.dart';
 import '../data/firebase_feed_repository.dart';
-import '../providers/feed_provider.dart';
 
 class CreateVideoPostScreen extends ConsumerStatefulWidget {
   const CreateVideoPostScreen({super.key});
 
   @override
-  ConsumerState<CreateVideoPostScreen> createState() => _CreateVideoPostScreenState();
+  ConsumerState<CreateVideoPostScreen> createState() =>
+      _CreateVideoPostScreenState();
 }
 
 class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
@@ -22,13 +22,14 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
   File? _selectedVideo;
   VideoPlayerController? _videoController;
   bool _isUploading = false;
+  double _uploadProgress = 0;
 
   Future<void> _pickVideo() async {
     final XFile? video = await _picker.pickVideo(
       source: ImageSource.gallery,
       maxDuration: const Duration(seconds: 60),
     );
-    
+
     if (video != null) {
       final file = File(video.path);
       setState(() {
@@ -37,13 +38,13 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
       _initializeVideo(file);
     }
   }
-  
+
   Future<void> _recordVideo() async {
     final XFile? video = await _picker.pickVideo(
       source: ImageSource.camera,
       maxDuration: const Duration(seconds: 60),
     );
-    
+
     if (video != null) {
       final file = File(video.path);
       setState(() {
@@ -73,7 +74,11 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
   String _selectedRatio = '9:16'; // Options: 9:16, 1:1, 4:5, 16:9
 
   final List<Map<String, dynamic>> _ratioOptions = [
-    {'label': '9:16 Reel', 'value': '9:16', 'icon': Icons.stay_current_portrait},
+    {
+      'label': '9:16 Reel',
+      'value': '9:16',
+      'icon': Icons.stay_current_portrait
+    },
     {'label': '1:1 Square', 'value': '1:1', 'icon': Icons.crop_square},
     {'label': '4:5 Portrait', 'value': '4:5', 'icon': Icons.crop_5_4},
     {'label': '16:9 Wide', 'value': '16:9', 'icon': Icons.crop_16_9},
@@ -95,19 +100,29 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
 
   Future<void> _uploadAndPost() async {
     if (_selectedVideo == null) return;
-    
-    setState(() => _isUploading = true);
-    
+
+    setState(() {
+      _isUploading = true;
+      _uploadProgress = 0;
+    });
+
     try {
-      final videoUrl = await CloudinaryService.uploadVideo(_selectedVideo!);
-      
+      final videoUrl = await CloudinaryService.uploadVideo(
+        _selectedVideo!,
+        onProgress: (progress) {
+          if (mounted) setState(() => _uploadProgress = progress);
+        },
+      );
+
       if (videoUrl == null) {
         throw Exception('Failed to upload video');
       }
-      
+
       final post = PostModel(
         id: '', // Firestore will generate this
-        title: _titleController.text.trim().isEmpty ? 'New Reel' : _titleController.text.trim(),
+        title: _titleController.text.trim().isEmpty
+            ? 'New Reel'
+            : _titleController.text.trim(),
         blocks: [],
         estimatedReadTime: 1,
         category: 'Reel',
@@ -119,16 +134,19 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
         videoUrl: videoUrl,
         aspectRatio: _selectedRatio,
       );
-      
+
       await ref.read(feedRepositoryProvider).createPost(post);
-      
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Post published successfully!')));
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Post published successfully!')));
         context.pop();
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content:
+                Text("We couldn't publish this video. Please try again.")));
       }
     } finally {
       if (mounted) {
@@ -146,9 +164,13 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
           if (_selectedVideo != null)
             TextButton(
               onPressed: _isUploading ? null : _uploadAndPost,
-              child: _isUploading 
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('Post', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: _isUploading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Text('Post',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
             ),
         ],
       ),
@@ -159,7 +181,8 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
                 children: [
                   const Icon(Icons.video_library, size: 64, color: Colors.grey),
                   const SizedBox(height: 16),
-                  const Text('Select or record a video up to 60s', style: TextStyle(color: Colors.grey)),
+                  const Text('Select or record a video up to 60s',
+                      style: TextStyle(color: Colors.grey)),
                   const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -185,15 +208,24 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
               children: [
                 // Video Preview formatted according to selected ratio
                 Center(
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(_selectedRatio == '9:16' ? 0 : 16),
-                    child: AspectRatio(
-                      aspectRatio: _getRatioValue(_selectedRatio),
-                      child: Container(
-                        color: Colors.black,
-                        child: _videoController != null && _videoController!.value.isInitialized
-                            ? VideoPlayer(_videoController!)
-                            : const SizedBox.shrink(),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(
+                          _selectedRatio == '9:16' ? 0 : 20),
+                      border: Border.all(color: Colors.white12, width: 1),
+                    ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(
+                          _selectedRatio == '9:16' ? 0 : 20),
+                      child: AspectRatio(
+                        aspectRatio: _getRatioValue(_selectedRatio),
+                        child: Container(
+                          color: Colors.black,
+                          child: _videoController != null &&
+                                  _videoController!.value.isInitialized
+                              ? VideoPlayer(_videoController!)
+                              : const SizedBox.shrink(),
+                        ),
                       ),
                     ),
                   ),
@@ -218,10 +250,14 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
                         children: [
                           TextField(
                             controller: _titleController,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontFamily: 'Outfit',
+                                fontWeight: FontWeight.bold),
                             decoration: const InputDecoration(
                               hintText: 'Add a title to your post...',
-                              hintStyle: TextStyle(color: Colors.white70),
+                              hintStyle: TextStyle(color: Colors.white54),
                               border: InputBorder.none,
                             ),
                             maxLength: 80,
@@ -229,41 +265,61 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
                           const SizedBox(height: 8),
                           const Text(
                             'Aspect Ratio:',
-                            style: TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                                fontFamily: 'Inter',
+                                fontWeight: FontWeight.w600),
                           ),
                           const SizedBox(height: 8),
                           SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
                             child: Row(
                               children: _ratioOptions.map((opt) {
-                                final isSelected = _selectedRatio == opt['value'];
+                                final isSelected =
+                                    _selectedRatio == opt['value'];
                                 return Padding(
                                   padding: const EdgeInsets.only(right: 8.0),
                                   child: FilterChip(
                                     selected: isSelected,
                                     showCheckmark: false,
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 8),
                                     avatar: Icon(
                                       opt['icon'] as IconData,
                                       size: 16,
-                                      color: isSelected ? Colors.black : Colors.white,
+                                      color: isSelected
+                                          ? Colors.black
+                                          : Colors.white70,
                                     ),
                                     label: Text(
                                       opt['label'] as String,
                                       style: TextStyle(
-                                        color: isSelected ? Colors.black : Colors.white,
-                                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                                        fontSize: 12,
+                                        color: isSelected
+                                            ? Colors.black
+                                            : Colors.white,
+                                        fontWeight: isSelected
+                                            ? FontWeight.bold
+                                            : FontWeight.w500,
+                                        fontFamily: 'Inter',
+                                        fontSize: 13,
                                       ),
                                     ),
-                                    backgroundColor: Colors.black54,
-                                    selectedColor: Colors.white,
-                                    side: BorderSide(
-                                      color: isSelected ? Colors.white : Colors.white24,
+                                    backgroundColor: const Color(0xFF1C1C28),
+                                    selectedColor: const Color(0xFFFF5A1F),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                      side: BorderSide(
+                                        color: isSelected
+                                            ? const Color(0xFFFF5A1F)
+                                            : Colors.white12,
+                                      ),
                                     ),
                                     onSelected: (val) {
                                       if (val) {
                                         setState(() {
-                                          _selectedRatio = opt['value'] as String;
+                                          _selectedRatio =
+                                              opt['value'] as String;
                                         });
                                       }
                                     },
@@ -279,15 +335,39 @@ class _CreateVideoPostScreenState extends ConsumerState<CreateVideoPostScreen> {
                 ),
                 if (_isUploading)
                   Container(
-                    color: Colors.black54,
-                    child: const Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          CircularProgressIndicator(),
-                          SizedBox(height: 16),
-                          Text('Uploading...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                        ],
+                    color: Colors.black.withValues(alpha: 0.7),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1C1C28),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 180,
+                              child: LinearProgressIndicator(
+                                value: _uploadProgress > 0
+                                    ? _uploadProgress
+                                    : null,
+                                color: const Color(0xFFFF5A1F),
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                                _uploadProgress > 0
+                                    ? 'Uploading ${(_uploadProgress * 100).round()}%'
+                                    : 'Preparing upload…',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontFamily: 'Outfit',
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 16)),
+                          ],
+                        ),
                       ),
                     ),
                   ),

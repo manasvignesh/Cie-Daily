@@ -40,7 +40,10 @@ class _SingleReelScreenState extends State<SingleReelScreen> {
     });
 
     try {
-      final doc = await FirebaseFirestore.instance.collection('posts').doc(widget.reelId).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('posts')
+          .doc(widget.reelId)
+          .get();
       if (doc.exists && mounted) {
         setState(() {
           _loadedPost = PostModel.fromJson({...doc.data()!, 'id': doc.id});
@@ -55,7 +58,7 @@ class _SingleReelScreenState extends State<SingleReelScreen> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Error loading Reel: $e';
+          _error = "We couldn't load this reel. It may have been removed.";
           _loading = false;
         });
       }
@@ -66,19 +69,41 @@ class _SingleReelScreenState extends State<SingleReelScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-          onPressed: () => context.pop(),
-        ),
-        title: const Text(
-          'Reel',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
+      body: Stack(
+        children: [
+          _buildBody(),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 120,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.6),
+                      Colors.transparent
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 8,
+            child: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white,
+                  shadows: [Shadow(color: Colors.black45, blurRadius: 4)]),
+              onPressed: () => context.pop(),
+            ),
+          ),
+        ],
       ),
-      body: _buildBody(),
     );
   }
 
@@ -96,7 +121,8 @@ class _SingleReelScreenState extends State<SingleReelScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 48),
+              const Icon(Icons.error_outline_rounded,
+                  color: Colors.redAccent, size: 48),
               const SizedBox(height: 12),
               Text(
                 _error!,
@@ -117,7 +143,8 @@ class _SingleReelScreenState extends State<SingleReelScreen> {
 
     if (_loadedPost == null) {
       return const Center(
-        child: Text('Reel unavailable', style: TextStyle(color: Colors.white70)),
+        child:
+            Text('Reel unavailable', style: TextStyle(color: Colors.white70)),
       );
     }
 

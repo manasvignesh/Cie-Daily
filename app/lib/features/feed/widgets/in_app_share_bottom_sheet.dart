@@ -25,7 +25,8 @@ class InAppShareBottomSheet extends ConsumerStatefulWidget {
   }
 
   @override
-  ConsumerState<InAppShareBottomSheet> createState() => _InAppShareBottomSheetState();
+  ConsumerState<InAppShareBottomSheet> createState() =>
+      _InAppShareBottomSheetState();
 }
 
 class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
@@ -43,7 +44,8 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
   Widget build(BuildContext context) {
     final conversationsAsync = ref.watch(conversationsProvider);
     final currentUser = FirebaseAuth.instance.currentUser;
-    final isReel = widget.post.category.toLowerCase() == 'reel' || widget.post.videoUrl != null;
+    final isReel = widget.post.category.toLowerCase() == 'reel' ||
+        widget.post.videoUrl != null;
 
     return Container(
       constraints: BoxConstraints(
@@ -73,7 +75,9 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: isReel ? Colors.orange.withOpacity(0.2) : Colors.blue.withOpacity(0.2),
+                  color: isReel
+                      ? Colors.orange.withValues(alpha: 0.2)
+                      : Colors.blue.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
@@ -114,7 +118,7 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.06),
+              color: Colors.white.withValues(alpha: 0.06),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(color: Colors.white12),
             ),
@@ -132,7 +136,8 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
                         width: 50,
                         height: 50,
                         color: Colors.grey[800],
-                        child: const Icon(Icons.broken_image, color: Colors.white54, size: 20),
+                        child: const Icon(Icons.broken_image,
+                            color: Colors.white54, size: 20),
                       ),
                     ),
                   )
@@ -141,7 +146,9 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: isReel ? Colors.orange.withOpacity(0.3) : Colors.blue.withOpacity(0.3),
+                      color: isReel
+                          ? Colors.orange.withValues(alpha: 0.3)
+                          : Colors.blue.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Icon(
@@ -167,7 +174,8 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
                       const SizedBox(height: 4),
                       Text(
                         'By ${widget.post.authorName}',
-                        style: const TextStyle(color: Colors.white54, fontSize: 12),
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12),
                       ),
                     ],
                   ),
@@ -181,17 +189,25 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
           // Search Field
           TextField(
             controller: _searchController,
-            style: const TextStyle(color: Colors.white),
+            style: const TextStyle(
+                color: Colors.white, fontFamily: 'Inter', fontSize: 14),
             decoration: InputDecoration(
               hintText: 'Search connections...',
               hintStyle: const TextStyle(color: Colors.white38),
-              prefixIcon: const Icon(Icons.search, color: Colors.white54),
+              prefixIcon:
+                  const Icon(Icons.search_rounded, color: Colors.white54),
               filled: true,
-              fillColor: Colors.white.withOpacity(0.08),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              fillColor: const Color(0xFF1C1C28),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide:
+                    const BorderSide(color: Color(0xFFFF5A1F), width: 1.5),
               ),
             ),
             onChanged: (val) {
@@ -212,8 +228,10 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
                     (id) => id != currentUser.uid,
                     orElse: () => '',
                   );
-                  final details = conv.participantDetails[partnerId] as Map<String, dynamic>?;
-                  final name = (details?['name'] as String? ?? 'Student').toLowerCase();
+                  final details = conv.participantDetails[partnerId]
+                      as Map<String, dynamic>?;
+                  final name =
+                      (details?['name'] as String? ?? 'Student').toLowerCase();
                   return partnerId.isNotEmpty && name.contains(_searchQuery);
                 }).toList();
 
@@ -222,115 +240,145 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.people_outline, size: 48, color: Colors.white.withOpacity(0.3)),
+                        Icon(Icons.people_outline,
+                            size: 48,
+                            color: Colors.white.withValues(alpha: 0.3)),
                         const SizedBox(height: 12),
                         Text(
                           conversations.isEmpty
                               ? 'No connected friends yet.\nConnect with peers in CIE Chat to share!'
                               : 'No connection matching "$_searchQuery"',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white54, fontSize: 14),
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 14),
                         ),
                       ],
                     ),
                   );
                 }
 
-                return ListView.separated(
+                return GridView.builder(
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    childAspectRatio: 0.85,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 16,
+                  ),
                   itemCount: filteredList.length,
-                  separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
                   itemBuilder: (context, index) {
                     final conv = filteredList[index];
                     final partnerId = conv.participants.firstWhere(
                       (id) => id != currentUser.uid,
                       orElse: () => '',
                     );
-                    final details = conv.participantDetails[partnerId] as Map<String, dynamic>?;
-                    final partnerName = details?['name'] as String? ?? 'Student';
+                    final details = conv.participantDetails[partnerId]
+                        as Map<String, dynamic>?;
+                    final partnerName =
+                        details?['name'] as String? ?? 'Student';
                     final partnerAvatar = details?['photoUrl'] as String?;
                     final isSent = _sentConversationIds.contains(conv.id);
 
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      leading: AppAvatar(
-                        imageUrl: partnerAvatar,
-                        fallbackText: partnerName,
-                        radius: 20,
-                      ),
-                      title: Text(
-                        partnerName,
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
-                      ),
-                      subtitle: Text(
-                        'Direct Connection',
-                        style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
-                      ),
-                      trailing: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: isSent ? Colors.grey[800] : Theme.of(context).colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                        ),
-                        onPressed: isSent
-                            ? null
-                            : () async {
-                                final category = isReel ? "Reel" : "Article";
-                                final img = widget.post.imageUrl ?? '';
-                                final vid = widget.post.videoUrl ?? '';
-                                final author = widget.post.authorName.replaceAll('|', ' ');
-                                final avatar = widget.post.authorAvatar ?? '';
-                                final title = widget.post.title.replaceAll('|', ' ');
-                                final shareMessage = '[SHARED_POST|${widget.post.id}|$category|$title|$img|$vid|$author|$avatar]';
-                                try {
-                                  await ref.read(chatRepositoryProvider).sendMessage(
-                                        conv.id,
-                                        partnerId,
-                                        shareMessage,
-                                      );
-                                  setState(() {
-                                    _sentConversationIds.add(conv.id);
-                                  });
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Shared with $partnerName!'),
-                                        backgroundColor: Colors.green,
-                                        duration: const Duration(seconds: 2),
-                                      ),
+                    return GestureDetector(
+                      onTap: isSent
+                          ? null
+                          : () async {
+                              final category = isReel ? "Reel" : "Article";
+                              final img = widget.post.imageUrl ?? '';
+                              final vid = widget.post.videoUrl ?? '';
+                              final author =
+                                  widget.post.authorName.replaceAll('|', ' ');
+                              final avatar = widget.post.authorAvatar ?? '';
+                              final title =
+                                  widget.post.title.replaceAll('|', ' ');
+                              final shareMessage =
+                                  '[SHARED_POST|${widget.post.id}|$category|$title|$img|$vid|$author|$avatar]';
+                              try {
+                                await ref
+                                    .read(chatRepositoryProvider)
+                                    .sendMessage(
+                                      conv.id,
+                                      partnerId,
+                                      shareMessage,
                                     );
-                                  }
-                                } catch (e) {
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text('Failed to share: $e'),
-                                        backgroundColor: Colors.redAccent,
-                                      ),
-                                    );
-                                  }
+                                setState(() {
+                                  _sentConversationIds.add(conv.id);
+                                });
+                                if (mounted && context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content:
+                                          Text('Shared with $partnerName!'),
+                                      backgroundColor: const Color(0xFFFF5A1F),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
                                 }
-                              },
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isSent ? Icons.check : Icons.send,
-                              size: 14,
+                              } catch (e) {
+                                if (mounted && context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text(
+                                          "We couldn't share this item. Please try again."),
+                                      backgroundColor: Colors.redAccent,
+                                    ),
+                                  );
+                                }
+                              }
+                            },
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isSent
+                                    ? const Color(0xFFFF5A1F)
+                                    : Colors.transparent,
+                                width: 2,
+                              ),
                             ),
-                            const SizedBox(width: 6),
-                            Text(isSent ? 'Sent' : 'Send'),
-                          ],
-                        ),
+                            child: AppAvatar(
+                              imageUrl: partnerAvatar,
+                              fallbackText: partnerName,
+                              radius: 28,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            partnerName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                                fontFamily: 'Inter'),
+                          ),
+                          Text(
+                            isSent ? 'Sent' : 'Send',
+                            style: TextStyle(
+                              color: isSent
+                                  ? const Color(0xFFFF5A1F)
+                                  : Colors.white54,
+                              fontSize: 11,
+                              fontFamily: 'Inter',
+                              fontWeight:
+                                  isSent ? FontWeight.bold : FontWeight.normal,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Center(
-                child: Text('Error loading connections: $err', style: const TextStyle(color: Colors.redAccent)),
+              error: (err, _) => const Center(
+                child: Text(
+                    "We couldn't load your connections. Please try again.",
+                    style: TextStyle(color: Colors.redAccent)),
               ),
             ),
           ),

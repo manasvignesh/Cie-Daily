@@ -15,14 +15,17 @@ class AdminDashboardScreen extends ConsumerWidget {
           FirebaseFirestore.instance.collection('spaces').count().get(),
           FirebaseFirestore.instance.collection('posts').count().get(),
         ]),
-        builder: (context, AsyncSnapshot<List<AggregateQuerySnapshot>> snapshot) {
+        builder:
+            (context, AsyncSnapshot<List<AggregateQuerySnapshot>> snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
           if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
+            return const Center(
+                child:
+                    Text("We couldn't load the dashboard. Please try again."));
           }
-          
+
           final userCount = snapshot.data?[0].count ?? 0;
           final spacesCount = snapshot.data?[1].count ?? 0;
           final postsCount = snapshot.data?[2].count ?? 0;
@@ -34,10 +37,15 @@ class AdminDashboardScreen extends ConsumerWidget {
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
               children: [
-                _buildStatCard(context, 'Total Users', userCount.toString(), Icons.people),
-                _buildStatCard(context, 'Total Spaces', spacesCount.toString(), Icons.space_dashboard),
-                _buildStatCard(context, 'Total Posts', postsCount.toString(), Icons.article),
-                _buildStatCard(context, 'Pending Reports', '0', Icons.report_problem, color: Colors.red),
+                _buildStatCard(
+                    context, 'Total Users', userCount.toString(), Icons.people),
+                _buildStatCard(context, 'Total Spaces', spacesCount.toString(),
+                    Icons.space_dashboard),
+                _buildStatCard(context, 'Total Posts', postsCount.toString(),
+                    Icons.article),
+                _buildStatCard(
+                    context, 'Pending Reports', '0', Icons.report_problem,
+                    color: Colors.red),
               ],
             ),
           );
@@ -46,20 +54,51 @@ class AdminDashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatCard(BuildContext context, String title, String value, IconData icon, {Color? color}) {
-    return Card(
-      elevation: 4,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+  Widget _buildStatCard(
+      BuildContext context, String title, String value, IconData icon,
+      {Color? color}) {
+    final effectiveColor = color ?? const Color(0xFFFF5A1F);
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF13131C),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+            color: effectiveColor.withValues(alpha: 0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: effectiveColor.withValues(alpha: 0.15),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 48, color: color ?? Theme.of(context).colorScheme.primary),
-            const SizedBox(height: 16),
-            Text(value, style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Text(title, style: Theme.of(context).textTheme.bodyMedium, textAlign: TextAlign.center),
+            Icon(icon, size: 36, color: effectiveColor),
+            const SizedBox(height: 12),
+            Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                fontFamily: 'Outfit',
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              title,
+              style: TextStyle(
+                color: Colors.grey[400],
+                fontSize: 13,
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w500,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
       ),

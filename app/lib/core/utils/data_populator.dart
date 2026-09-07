@@ -10,18 +10,66 @@ class DataPopulator {
 
     // 1. Populate Technologies
     final techDocs = {
-      'tech_flutter': {'name': 'Flutter', 'parentTechnologyId': null, 'description': 'Cross-platform mobile framework by Google.'},
-      'tech_android': {'name': 'Android', 'parentTechnologyId': null, 'description': 'Native Android development.'},
-      'tech_web': {'name': 'Web Development', 'parentTechnologyId': null, 'description': 'Frontend and backend web technologies.'},
-      'tech_ai': {'name': 'AI', 'parentTechnologyId': null, 'description': 'Artificial Intelligence and deep learning.'},
-      'tech_ml': {'name': 'Machine Learning', 'parentTechnologyId': 'tech_ai', 'description': 'Algorithms and statistical models.'},
-      'tech_cybersec': {'name': 'Cybersecurity', 'parentTechnologyId': null, 'description': 'Information security and ethical hacking.'},
-      'tech_cloud': {'name': 'Cloud Computing', 'parentTechnologyId': null, 'description': 'AWS, Azure, GCP and cloud architecture.'},
-      'tech_iot': {'name': 'IoT', 'parentTechnologyId': null, 'description': 'Internet of Things.'},
-      'tech_robotics': {'name': 'Robotics', 'parentTechnologyId': null, 'description': 'Hardware and software robotics.'},
-      'tech_devops': {'name': 'DevOps', 'parentTechnologyId': null, 'description': 'CI/CD, Docker, Kubernetes.'},
-      'tech_blockchain': {'name': 'Blockchain', 'parentTechnologyId': null, 'description': 'Web3, smart contracts, crypto.'},
-      'tech_uiux': {'name': 'UI/UX Design', 'parentTechnologyId': null, 'description': 'User interface and experience design.'},
+      'tech_flutter': {
+        'name': 'Flutter',
+        'parentTechnologyId': null,
+        'description': 'Cross-platform mobile framework by Google.'
+      },
+      'tech_android': {
+        'name': 'Android',
+        'parentTechnologyId': null,
+        'description': 'Native Android development.'
+      },
+      'tech_web': {
+        'name': 'Web Development',
+        'parentTechnologyId': null,
+        'description': 'Frontend and backend web technologies.'
+      },
+      'tech_ai': {
+        'name': 'AI',
+        'parentTechnologyId': null,
+        'description': 'Artificial Intelligence and deep learning.'
+      },
+      'tech_ml': {
+        'name': 'Machine Learning',
+        'parentTechnologyId': 'tech_ai',
+        'description': 'Algorithms and statistical models.'
+      },
+      'tech_cybersec': {
+        'name': 'Cybersecurity',
+        'parentTechnologyId': null,
+        'description': 'Information security and ethical hacking.'
+      },
+      'tech_cloud': {
+        'name': 'Cloud Computing',
+        'parentTechnologyId': null,
+        'description': 'AWS, Azure, GCP and cloud architecture.'
+      },
+      'tech_iot': {
+        'name': 'IoT',
+        'parentTechnologyId': null,
+        'description': 'Internet of Things.'
+      },
+      'tech_robotics': {
+        'name': 'Robotics',
+        'parentTechnologyId': null,
+        'description': 'Hardware and software robotics.'
+      },
+      'tech_devops': {
+        'name': 'DevOps',
+        'parentTechnologyId': null,
+        'description': 'CI/CD, Docker, Kubernetes.'
+      },
+      'tech_blockchain': {
+        'name': 'Blockchain',
+        'parentTechnologyId': null,
+        'description': 'Web3, smart contracts, crypto.'
+      },
+      'tech_uiux': {
+        'name': 'UI/UX Design',
+        'parentTechnologyId': null,
+        'description': 'User interface and experience design.'
+      },
     };
 
     final batch = _firestore.batch();
@@ -39,11 +87,36 @@ class DataPopulator {
 
     // 2. Populate Sample Users
     final users = [
-      {'uid': 'user_1', 'name': 'Alice Engineer', 'role': 'moderator', 'bio': 'Flutter enthusiast.'},
-      {'uid': 'user_2', 'name': 'Bob Hacker', 'role': 'student', 'bio': 'Cybersecurity researcher.'},
-      {'uid': 'user_3', 'name': 'Charlie Cloud', 'role': 'platform_admin', 'bio': 'Cloud architect.'},
-      {'uid': 'user_4', 'name': 'Diana AI', 'role': 'student', 'bio': 'Machine learning researcher.'},
-      {'uid': 'user_5', 'name': 'Eve Designer', 'role': 'student', 'bio': 'UI/UX specialist.'},
+      {
+        'uid': 'user_1',
+        'name': 'Alice Engineer',
+        'role': 'moderator',
+        'bio': 'Flutter enthusiast.'
+      },
+      {
+        'uid': 'user_2',
+        'name': 'Bob Hacker',
+        'role': 'student',
+        'bio': 'Cybersecurity researcher.'
+      },
+      {
+        'uid': 'user_3',
+        'name': 'Charlie Cloud',
+        'role': 'platform_admin',
+        'bio': 'Cloud architect.'
+      },
+      {
+        'uid': 'user_4',
+        'name': 'Diana AI',
+        'role': 'student',
+        'bio': 'Machine learning researcher.'
+      },
+      {
+        'uid': 'user_5',
+        'name': 'Eve Designer',
+        'role': 'student',
+        'bio': 'UI/UX specialist.'
+      },
     ];
 
     for (var user in users) {
@@ -68,11 +141,31 @@ class DataPopulator {
 
     // 3. Populate Spaces
     final spaces = {
-      'space_flutter': {'techId': 'tech_flutter', 'name': 'Flutter Development', 'desc': 'Learn cross-platform mobile development.'},
-      'space_ai': {'techId': 'tech_ai', 'name': 'Artificial Intelligence', 'desc': 'Discuss AI news, papers, and models.'},
-      'space_web': {'techId': 'tech_web', 'name': 'Web Wizards', 'desc': 'React, Vue, and all things web.'},
-      'space_cyber': {'techId': 'tech_cybersec', 'name': 'Cybersecurity Hub', 'desc': 'Ethical hacking and security research.'},
-      'space_cloud': {'techId': 'tech_cloud', 'name': 'Cloud Engineers', 'desc': 'AWS, GCP, Azure infrastructure.'},
+      'space_flutter': {
+        'techId': 'tech_flutter',
+        'name': 'Flutter Development',
+        'desc': 'Learn cross-platform mobile development.'
+      },
+      'space_ai': {
+        'techId': 'tech_ai',
+        'name': 'Artificial Intelligence',
+        'desc': 'Discuss AI news, papers, and models.'
+      },
+      'space_web': {
+        'techId': 'tech_web',
+        'name': 'Web Wizards',
+        'desc': 'React, Vue, and all things web.'
+      },
+      'space_cyber': {
+        'techId': 'tech_cybersec',
+        'name': 'Cybersecurity Hub',
+        'desc': 'Ethical hacking and security research.'
+      },
+      'space_cloud': {
+        'techId': 'tech_cloud',
+        'name': 'Cloud Engineers',
+        'desc': 'AWS, GCP, Azure infrastructure.'
+      },
     };
 
     for (var entry in spaces.entries) {
@@ -97,8 +190,18 @@ class DataPopulator {
     // 4. Populate 50+ Posts
     debugPrint("=== STARTING BATCH 2 (Posts) ===");
     final postBatch = _firestore.batch();
-    final categories = ['Tutorial', 'Question', 'Project Showcase', 'Resource', 'Event', 'Internship', 'Hackathon', 'Discussion', 'News'];
-    
+    final categories = [
+      'Tutorial',
+      'Question',
+      'Project Showcase',
+      'Resource',
+      'Event',
+      'Internship',
+      'Hackathon',
+      'Discussion',
+      'News'
+    ];
+
     final postTemplates = [
       "Understanding async/await",
       "Best practices for secure APIs",
@@ -117,7 +220,7 @@ class DataPopulator {
       final spaceData = spaces[spaceKey]!;
       final userKey = users[Random().nextInt(users.length)]['uid'];
       final template = postTemplates[Random().nextInt(postTemplates.length)];
-      
+
       final docRef = _firestore.collection('posts').doc('post_$i');
       postBatch.set(docRef, {
         'postId': 'post_$i',
@@ -128,8 +231,11 @@ class DataPopulator {
         'category': categories[Random().nextInt(categories.length)],
         'status': 'approved',
         'title': '$template ${i + 1}',
-        'description': 'This is an autogenerated post description containing valuable educational content for students. #learning',
-        'mediaUrls': Random().nextBool() ? ['https://picsum.photos/seed/post$i/600/400'] : [],
+        'description':
+            'This is an autogenerated post description containing valuable educational content for students. #learning',
+        'mediaUrls': Random().nextBool()
+            ? ['https://picsum.photos/seed/post$i/600/400']
+            : [],
         'externalLinks': [],
         'likesCount': Random().nextInt(100),
         'commentsCount': Random().nextInt(20),

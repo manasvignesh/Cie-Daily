@@ -3,7 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import '../../feed/models/post_model.dart';
 import '../../../core/widgets/data_display/app_avatar.dart';
-import '../../../core/widgets/verified_badge.dart';
+import '../../../core/theme/app_theme.dart';
+import '../utils/shared_content_formatter.dart';
 
 class SharedPostData {
   final String postId;
@@ -35,19 +36,33 @@ class SharedPostData {
           imageUrl: parts[4].isNotEmpty ? parts[4] : null,
           videoUrl: parts[5].isNotEmpty ? parts[5] : null,
           authorName: parts[6],
-          authorAvatar: parts.length > 7 && parts[7].isNotEmpty ? parts[7] : null,
+          authorAvatar:
+              parts.length > 7 && parts[7].isNotEmpty ? parts[7] : null,
         );
       }
+    }
+
+    if (content.startsWith('[SHARED_POST]')) {
+      final payload = content.substring('[SHARED_POST]'.length).trim();
+      final isReel = payload.toLowerCase().contains('reel');
+      return SharedPostData(
+        postId: payload,
+        category: isReel ? 'Reel' : 'Article',
+        title: sharedContentPreview(content),
+        authorName: 'Creator',
+      );
     }
 
     // Fallback: parse legacy text format
     // 📌 Shared Reel: "test-6"\n[Post ID: 8zMz7KPRH6CEcDQnn21y]
     if (content.contains('[Post ID:')) {
-      final idMatch = RegExp(r'\[Post ID:\s*([a-zA-Z0-9_]+)\]').firstMatch(content);
+      final idMatch =
+          RegExp(r'\[Post ID:\s*([a-zA-Z0-9_]+)\]').firstMatch(content);
       if (idMatch != null) {
         final id = idMatch.group(1)!;
         final isReel = content.contains('Reel');
-        final titleMatch = RegExp(r'Shared (?:Reel|Article):\s*"([^"]+)"').firstMatch(content);
+        final titleMatch =
+            RegExp(r'Shared (?:Reel|Article):\s*"([^"]+)"').firstMatch(content);
         final title = titleMatch?.group(1) ?? 'Shared Drop';
         return SharedPostData(
           postId: id,
@@ -78,7 +93,6 @@ class SharedPostChatCard extends StatefulWidget {
 
 class _SharedPostChatCardState extends State<SharedPostChatCard> {
   PostModel? _fetchedPost;
-  bool _loading = false;
 
   @override
   void initState() {
@@ -88,23 +102,23 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
 
   Future<void> _fetchFullPostIfNeeded() async {
     if (widget.data.imageUrl != null) return;
-    setState(() => _loading = true);
     try {
-      final doc = await FirebaseFirestore.instance.collection('posts').doc(widget.data.postId).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('posts')
+          .doc(widget.data.postId)
+          .get();
       if (doc.exists && mounted) {
         final map = doc.data()!;
         setState(() {
           _fetchedPost = PostModel.fromJson({...map, 'id': doc.id});
-          _loading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _loading = false);
-    }
+    } catch (_) {}
   }
 
   void _openSharedContent(BuildContext context) async {
-    final isReel = widget.data.category.toLowerCase() == 'reel' || widget.data.videoUrl != null;
+    final isReel = widget.data.category.toLowerCase() == 'reel' ||
+        widget.data.videoUrl != null;
 
     if (_fetchedPost != null) {
       if (isReel) {
@@ -117,10 +131,15 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
 
     // Fetch and open
     try {
-      final doc = await FirebaseFirestore.instance.collection('posts').doc(widget.data.postId).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('posts')
+          .doc(widget.data.postId)
+          .get();
       if (doc.exists && context.mounted) {
         final post = PostModel.fromJson({...doc.data()!, 'id': doc.id});
-        if (isReel || post.category.toLowerCase() == 'reel' || post.videoUrl != null) {
+        if (isReel ||
+            post.category.toLowerCase() == 'reel' ||
+            post.videoUrl != null) {
           context.push('/reel/${post.id}', extra: post);
         } else {
           context.push('/discover/article', extra: post);
@@ -133,7 +152,9 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open post: $e')),
+          const SnackBar(
+              content: Text(
+                  'This post could not be opened. It may have been removed.')),
         );
       }
     }
@@ -141,7 +162,8 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
 
   @override
   Widget build(BuildContext context) {
-    final isReel = widget.data.category.toLowerCase() == 'reel' || widget.data.videoUrl != null;
+    final isReel = widget.data.category.toLowerCase() == 'reel' ||
+        widget.data.videoUrl != null;
     final imageUrl = _fetchedPost?.imageUrl ?? widget.data.imageUrl;
     final authorName = _fetchedPost?.authorName ?? widget.data.authorName;
     final authorAvatar = _fetchedPost?.authorAvatar ?? widget.data.authorAvatar;
@@ -153,16 +175,20 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
         width: 250,
         margin: const EdgeInsets.only(bottom: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withOpacity(0.12), width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.4),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          color: widget.isMe
+              ? AppTheme.primaryOrange.withValues(alpha: 0.1)
+              : AppTheme.cardColor(context),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(20),
+            topRight: const Radius.circular(20),
+            bottomLeft: Radius.circular(widget.isMe ? 20 : 4),
+            bottomRight: Radius.circular(widget.isMe ? 4 : 20),
+          ),
+          border: Border.all(
+            color: widget.isMe
+                ? AppTheme.primaryOrange.withValues(alpha: 0.3)
+                : AppTheme.cardBorderColor(context),
+          ),
         ),
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -185,8 +211,8 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
                       authorName,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: AppTheme.primaryTextColor(context),
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
                       ),
@@ -194,16 +220,21 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
                   ),
                   const SizedBox(width: 4),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: isReel ? Colors.orange.withOpacity(0.25) : Colors.blue.withOpacity(0.25),
+                      color: isReel
+                          ? Colors.orange.withValues(alpha: 0.25)
+                          : Colors.blue.withValues(alpha: 0.25),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          isReel ? Icons.play_arrow_rounded : Icons.article_rounded,
+                          isReel
+                              ? Icons.play_arrow_rounded
+                              : Icons.article_rounded,
                           color: isReel ? Colors.orange : Colors.blueAccent,
                           size: 11,
                         ),
@@ -247,7 +278,7 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
-                          Colors.black.withOpacity(0.7),
+                          Colors.black.withValues(alpha: 0.7),
                         ],
                       ),
                     ),
@@ -259,7 +290,7 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
                       child: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.55),
+                          color: Colors.black.withValues(alpha: 0.55),
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white38, width: 1.5),
                         ),
@@ -296,17 +327,22 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
             // Bottom Footer
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              color: Colors.white.withOpacity(0.04),
-              child: const Row(
+              color: AppTheme.surfaceMutedColor(context),
+              child: Row(
                 children: [
-                  Icon(Icons.touch_app_rounded, color: Colors.white54, size: 12),
-                  SizedBox(width: 4),
+                  Icon(Icons.touch_app_rounded,
+                      color: AppTheme.secondaryTextColor(context), size: 12),
+                  const SizedBox(width: 4),
                   Text(
                     'Tap to view in CIE Connect',
-                    style: TextStyle(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                        color: AppTheme.secondaryTextColor(context),
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500),
                   ),
-                  Spacer(),
-                  Icon(Icons.arrow_forward_ios_rounded, color: Colors.white38, size: 10),
+                  const Spacer(),
+                  Icon(Icons.arrow_forward_ios_rounded,
+                      color: AppTheme.tertiaryTextColor(context), size: 10),
                 ],
               ),
             ),
@@ -321,7 +357,11 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: isReel
-              ? [const Color(0xFF833AB4), const Color(0xFFFD1D1D), const Color(0xFFF56040)]
+              ? [
+                  const Color(0xFF833AB4),
+                  const Color(0xFFFD1D1D),
+                  const Color(0xFFF56040)
+                ]
               : [const Color(0xFF1E3C72), const Color(0xFF2A5298)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,

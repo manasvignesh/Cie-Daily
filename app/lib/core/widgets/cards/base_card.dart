@@ -10,7 +10,7 @@ class BaseCard extends StatelessWidget {
   const BaseCard({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(16),
+    this.padding = const EdgeInsets.all(20),
     this.onTap,
     this.color,
     this.elevation = 0,
@@ -20,17 +20,23 @@ class BaseCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: elevation,
-      color: color ?? Theme.of(context).colorScheme.surface,
+      color: color ?? Theme.of(context).cardTheme.color,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         side: BorderSide(
-          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
+          color:
+              Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
+          width: 1,
         ),
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
+        splashColor:
+            Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+        highlightColor:
+            Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.05),
         child: Padding(
           padding: padding ?? EdgeInsets.zero,
           child: child,

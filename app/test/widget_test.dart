@@ -1,20 +1,35 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-import 'package:cie_connect/app.dart';
+import 'package:cie_connect/features/chat/utils/shared_content_formatter.dart';
 
 void main() {
-  testWidgets('App smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const CIEConnectApp());
+  group('sharedContentPreview', () {
+    test('formats a structured article share', () {
+      expect(
+        sharedContentPreview(
+          '[SHARED_POST|post_1|Article|Pune Motion Lab|image|video|Author]',
+        ),
+        'Shared an article · Pune Motion Lab',
+      );
+    });
+
+    test('formats a structured reel share', () {
+      expect(
+        sharedContentPreview(
+          '[SHARED_POST|post_2|Reel|Live Atlas 🌍|image|video|Author]',
+        ),
+        'Shared a reel · Live Atlas 🌍',
+      );
+    });
+
+    test('hides a legacy internal identifier', () {
+      expect(
+        sharedContentPreview('[SHARED_POST]stock_article_3_internal'),
+        'Shared an article',
+      );
+    });
+
+    test('preserves a normal chat message', () {
+      expect(sharedContentPreview('See you at 4!'), 'See you at 4!');
+    });
   });
 }
-
-

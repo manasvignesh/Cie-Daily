@@ -1,13 +1,12 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /posts/{userId}/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null && request.auth.uid == userId;
-    }
+    // The current mobile application uploads media through Cloudinary and does
+    // not write Firebase Storage objects. Preserve legacy public reads while
+    // denying every client-side write until an owner-scoped upload flow exists.
     match /{allPaths=**} {
       allow read: if true;
-      allow write: if request.auth != null;
+      allow write: if false;
     }
   }
 }

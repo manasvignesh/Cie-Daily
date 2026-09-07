@@ -23,7 +23,8 @@ class ConnectionRequestModel {
     required this.createdAt,
   });
 
-  factory ConnectionRequestModel.fromMap(Map<String, dynamic> map, String docId) {
+  factory ConnectionRequestModel.fromMap(
+      Map<String, dynamic> map, String docId) {
     final ts = map['createdAt'];
     DateTime dt = DateTime.now();
     if (ts is Timestamp) {
@@ -76,19 +77,37 @@ class ConversationModel {
   });
 
   factory ConversationModel.fromMap(Map<String, dynamic> map, String docId) {
-    final ts = map['lastMessageTimestamp'];
-    DateTime dt = DateTime.now();
+    final ts = map['lastMessageTimestamp'] ?? map['updatedAt'] ?? map['createdAt'];
+    DateTime dt = DateTime.fromMillisecondsSinceEpoch(0);
     if (ts is Timestamp) {
       dt = ts.toDate();
+    } else if (ts is DateTime) {
+      dt = ts;
+    } else if (ts is num) {
+      dt = DateTime.fromMillisecondsSinceEpoch(ts.toInt());
     }
+    final rawParticipants = map['participants'];
+    if (rawParticipants is! Iterable) {
+      throw const FormatException('Conversation participants are missing');
+    }
+    final participants = rawParticipants.whereType<String>().where((id) => id.isNotEmpty).toList();
+    if (participants.isEmpty) {
+      throw const FormatException('Conversation has no valid participants');
+    }
+    final rawDetails = map['participantDetails'];
+    final rawUnread = map['unreadCounts'];
     return ConversationModel(
       id: docId,
-      participants: List<String>.from(map['participants'] ?? []),
-      participantDetails: Map<String, dynamic>.from(map['participantDetails'] ?? {}),
-      lastMessage: map['lastMessage'] ?? '',
-      lastMessageSenderId: map['lastMessageSenderId'] ?? '',
+      participants: participants,
+      participantDetails: rawDetails is Map
+          ? rawDetails.map((key, value) => MapEntry(key.toString(), value))
+          : const {},
+      lastMessage: map['lastMessage']?.toString() ?? '',
+      lastMessageSenderId: map['lastMessageSenderId']?.toString() ?? '',
       lastMessageTimestamp: dt,
-      unreadCounts: Map<String, dynamic>.from(map['unreadCounts'] ?? {}),
+      unreadCounts: rawUnread is Map
+          ? rawUnread.map((key, value) => MapEntry(key.toString(), value))
+          : const {},
     );
   }
 }

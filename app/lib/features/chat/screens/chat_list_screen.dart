@@ -5,12 +5,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/responsive.dart';
 import '../../profile/providers/profile_provider.dart';
+import '../../user/data/firebase_user_repository.dart';
 import '../data/chat_repository.dart';
 import '../models/chat_models.dart';
 import '../providers/chat_providers.dart';
-
-import '../../../core/theme/responsive.dart';
+import '../providers/group_chat_providers.dart';
+import '../widgets/create_group_sheet.dart';
+import '../widgets/explore_groups_sheet.dart';
 
 class ChatListScreen extends ConsumerStatefulWidget {
   const ChatListScreen({super.key});
@@ -22,6 +25,7 @@ class ChatListScreen extends ConsumerStatefulWidget {
 class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   final _codeController = TextEditingController();
   bool _isSubmitting = false;
+  int _selectedTabIndex = 0; // 0: Direct Messages, 1: Interest Groups
 
   @override
   void dispose() {
@@ -31,36 +35,51 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
   void _showAddConnectionSheet() {
     _codeController.clear();
+    final cardColor = AppTheme.cardColor(context);
+    final primaryText = AppTheme.primaryTextColor(context);
+    final secondaryText = AppTheme.secondaryTextColor(context);
+    final inputFill = AppTheme.inputFillColor(context);
+    final borderColor = AppTheme.cardBorderColor(context);
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
+      backgroundColor: cardColor,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setStateSheet) => Padding(
-          padding: EdgeInsets.fromLTRB(20, 24, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
+          padding: EdgeInsets.fromLTRB(
+              20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Center(
                 child: Container(
-                  width: 36, height: 4,
+                  width: 36,
+                  height: 4,
                   margin: const EdgeInsets.only(bottom: 16),
-                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                  decoration: BoxDecoration(
+                      color: secondaryText.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2)),
                 ),
               ),
-              const Text(
-                'Add Person',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+              Text(
+                'Add Connection',
+                style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: primaryText,
+                    fontFamily: 'Outfit'),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
-                'Enter a student\'s Connection Code to send a 1-to-1 connection request.',
-                style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.6)),
+                'Enter a student\'s Connection Code to start a direct message channel.',
+                style: TextStyle(
+                    fontSize: 13, color: secondaryText, fontFamily: 'Inter'),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 20),
@@ -68,19 +87,33 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                 controller: _codeController,
                 textCapitalization: TextCapitalization.characters,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                style: TextStyle(
+                    color: primaryText,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                    fontSize: 18),
+                textAlign: TextAlign.center,
                 decoration: InputDecoration(
                   hintText: 'e.g. MANAS-7K4P2',
-                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), letterSpacing: 0),
+                  hintStyle: TextStyle(
+                      color: secondaryText.withValues(alpha: 0.5),
+                      letterSpacing: 0,
+                      fontSize: 15),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
+                  fillColor: inputFill,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 16),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                    borderSide: BorderSide(color: borderColor),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(color: borderColor),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: AppTheme.primaryOrange),
+                    borderSide: const BorderSide(
+                        color: AppTheme.primaryOrange, width: 1.5),
                   ),
                 ),
               ),
@@ -94,32 +127,48 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
                         setStateSheet(() => _isSubmitting = true);
                         try {
-                          final msg = await ref.read(chatRepositoryProvider).sendConnectionRequest(code);
-                          if (mounted) {
+                          final msg = await ref
+                              .read(chatRepositoryProvider)
+                              .sendConnectionRequest(code);
+                          if (mounted && ctx.mounted) {
                             Navigator.pop(ctx);
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(msg), backgroundColor: Colors.green),
+                              SnackBar(
+                                  content: Text(msg),
+                                  backgroundColor: Colors.green),
                             );
                           }
                         } catch (e) {
-                          if (mounted) {
+                          if (mounted && context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text(e.toString().replaceAll('Exception: ', '')), backgroundColor: Colors.redAccent),
+                              const SnackBar(
+                                  content: Text(
+                                      "We couldn't complete that connection request. Please try again."),
+                                  backgroundColor: Colors.redAccent),
                             );
                           }
                         } finally {
-                          if (mounted) setStateSheet(() => _isSubmitting = false);
+                          if (mounted && ctx.mounted) {
+                            setStateSheet(() => _isSubmitting = false);
+                          }
                         }
                       },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.primaryOrange,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
                 ),
                 child: _isSubmitting
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text('Send Request', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            color: Colors.white, strokeWidth: 2))
+                    : const Text('Send Request',
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -128,254 +177,678 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     );
   }
 
+  void _showCreateGroupSheet() {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.cardColor(context),
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => const CreateGroupSheet(),
+    );
+  }
+
+  void _showExploreGroupsSheet() {
+    showModalBottomSheet(
+      context: context,
+      useRootNavigator: true,
+      backgroundColor: AppTheme.cardColor(context),
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => const ExploreGroupsSheet(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
     final userProfileAsync = ref.watch(userProfileProvider);
+    final connectionCodeAsync = ref.watch(connectionCodeProvider);
     final pendingReqsAsync = ref.watch(pendingRequestsProvider);
     final conversationsAsync = ref.watch(conversationsProvider);
+    final userGroupsAsync = ref.watch(userGroupsProvider);
 
-    final connectionCode = userProfileAsync.value?['connectionCode'] as String? ?? '...';
+    final profileCode =
+        userProfileAsync.value?['connectionCode']?.toString().trim() ?? '';
+    final connectionCode = connectionCodeAsync.valueOrNull ?? profileCode;
+    final primaryText = AppTheme.primaryTextColor(context);
+    final secondaryText = AppTheme.secondaryTextColor(context);
+    final cardColor = AppTheme.cardColor(context);
+    final borderColor = AppTheme.cardBorderColor(context);
+    final inputFill = AppTheme.inputFillColor(context);
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text('Chat & Connections', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.person_add_alt_1_rounded, color: AppTheme.primaryOrange),
-            onPressed: _showAddConnectionSheet,
-            tooltip: 'Add Person',
-          ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: EdgeInsets.fromLTRB(16, 8, 16, AppResponsive.overlayBottomOffset(context) + 16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── CONNECTION CODE CARD ──────────────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [AppTheme.primaryOrange.withOpacity(0.2), Colors.black],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: AppTheme.primaryOrange.withOpacity(0.3)),
-              ),
-              child: Row(
+      backgroundColor: AppTheme.backgroundColor(context),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(
+              20, 16, 20, AppResponsive.overlayBottomOffset(context) + 20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header Row
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primaryOrange.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.qr_code_rounded, color: AppTheme.primaryOrange, size: 24),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('Your Student Connection Code', style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600)),
-                        const SizedBox(height: 2),
-                        Text(
-                          connectionCode,
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Connect',
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w900,
+                          color: primaryText,
+                          fontFamily: 'Outfit',
+                          letterSpacing: -0.6,
                         ),
-                      ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Conversations that feel close',
+                        style: TextStyle(
+                          fontSize: 15,
+                          color: secondaryText,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_selectedTabIndex == 0)
+                    IconButton(
+                      icon: const Icon(Icons.person_add_alt_1_rounded,
+                          color: AppTheme.primaryOrange, size: 22),
+                      onPressed: _showAddConnectionSheet,
+                      tooltip: 'Add Person',
+                    )
+                  else ...[
+                    IconButton(
+                      icon: const Icon(Icons.explore_outlined,
+                          color: AppTheme.primaryOrange, size: 22),
+                      onPressed: _showExploreGroupsSheet,
+                      tooltip: 'Discover',
                     ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: connectionCode));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Connection code copied to clipboard!'), duration: Duration(seconds: 2)),
-                      );
-                    },
-                  ),
+                  ],
                 ],
               ),
-            ),
-            const SizedBox(height: 20),
+              const SizedBox(height: 16),
 
-            // ── PENDING CONNECTION REQUESTS ───────────────────────────────
-            pendingReqsAsync.when(
-              data: (requests) {
-                if (requests.isEmpty) return const SizedBox.shrink();
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text('Incoming Requests', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryOrange,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text('${requests.length}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    ...requests.map((req) => _buildRequestTile(req)),
-                    const SizedBox(height: 20),
-                  ],
-                );
-              },
-              loading: () => const SizedBox.shrink(),
-              error: (e, _) => const SizedBox.shrink(),
-            ),
-
-            // ── MESSAGES / CONVERSATIONS LIST ─────────────────────────────
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text('Direct Messages', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                TextButton.icon(
-                  onPressed: _showAddConnectionSheet,
-                  icon: const Icon(Icons.add, size: 18, color: AppTheme.primaryOrange),
-                  label: const Text('Add Person', style: TextStyle(color: AppTheme.primaryOrange, fontWeight: FontWeight.bold)),
+              // ── COMPACT CONNECTION CODE ROW ──────────────────────────────
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: cardColor,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: borderColor, width: 1),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            conversationsAsync.when(
-              data: (conversations) {
-                if (conversations.isEmpty) {
-                  return Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.04),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: Colors.white.withOpacity(0.08)),
-                    ),
-                    child: Column(
-                      children: [
-                        const Icon(Icons.forum_outlined, color: Colors.white24, size: 48),
-                        const SizedBox(height: 12),
-                        const Text('No 1-to-1 Conversations Yet', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Share your Connection Code or enter another student\'s code to connect privately.',
-                          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _showAddConnectionSheet,
-                          icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
-                          label: const Text('Add Person Now'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryOrange,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-
-                return ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: conversations.length,
-                  separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
-                  itemBuilder: (ctx, index) {
-                    final conv = conversations[index];
-                    final currentUid = user?.uid ?? '';
-                    final partnerUid = conv.participants.firstWhere((p) => p != currentUid, orElse: () => '');
-                    final details = conv.participantDetails[partnerUid] as Map<String, dynamic>? ?? {};
-                    final partnerName = details['name'] as String? ?? 'Student';
-                    final partnerPhoto = details['photoUrl'] as String?;
-                    final unread = (conv.unreadCounts[currentUid] as int?) ?? 0;
-
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                      leading: CircleAvatar(
-                        radius: 24,
-                        backgroundColor: const Color(0xFF2C2C2E),
-                        backgroundImage: partnerPhoto != null ? NetworkImage(partnerPhoto) : null,
-                        child: partnerPhoto == null
-                            ? Text(partnerName.isNotEmpty ? partnerName[0].toUpperCase() : 'S', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
-                            : null,
-                      ),
-                      title: Text(partnerName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                      subtitle: Text(
-                        conv.lastMessage,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: unread > 0 ? Colors.white : Colors.white54,
-                          fontWeight: unread > 0 ? FontWeight.bold : FontWeight.normal,
-                          fontSize: 13,
-                        ),
-                      ),
-                      trailing: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.end,
+                child: Row(
+                  children: [
+                    const Icon(Icons.qr_code_rounded,
+                        color: AppTheme.primaryOrange, size: 22),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(_formatTime(conv.lastMessageTimestamp), style: const TextStyle(color: Colors.white38, fontSize: 11)),
-                          if (unread > 0) ...[
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: const BoxDecoration(color: AppTheme.primaryOrange, shape: BoxShape.circle),
-                              child: Text('$unread', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
+                          Text('Your Connection Code',
+                              style: TextStyle(
+                                  color: secondaryText,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  fontFamily: 'Inter')),
+                          Text(
+                            connectionCodeAsync.isLoading &&
+                                    connectionCode.isEmpty
+                                ? 'Generating your code…'
+                                : connectionCodeAsync.hasError &&
+                                        connectionCode.isEmpty
+                                    ? 'Could not generate code'
+                                    : connectionCode,
+                            style: TextStyle(
+                                color: primaryText,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.0,
+                                fontFamily: 'Outfit'),
+                          ),
                         ],
                       ),
-                      onTap: () {
-                        context.push('/chat/${conv.id}', extra: {
-                          'partnerUid': partnerUid,
-                          'partnerName': partnerName,
-                          'partnerPhoto': partnerPhoto,
-                        });
+                    ),
+                    IconButton(
+                      icon: Icon(
+                          connectionCodeAsync.hasError && connectionCode.isEmpty
+                              ? Icons.refresh_rounded
+                              : Icons.copy_rounded,
+                          color: AppTheme.primaryOrange,
+                          size: 20),
+                      onPressed: connectionCode.isEmpty
+                          ? () {
+                              ref.invalidate(connectionCodeProvider);
+                            }
+                          : () {
+                              Clipboard.setData(
+                                  ClipboardData(text: connectionCode));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                    content: Text('Code copied to clipboard!'),
+                                    duration: Duration(seconds: 2)),
+                              );
+                            },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ── SLIM SEGMENTED CONTROL: [ Direct Messages ] [ Interest Groups ] ──
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  color: inputFill,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: borderColor, width: 1),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _selectedTabIndex = 0),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _selectedTabIndex == 0
+                                ? AppTheme.primaryOrange
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Direct Messages',
+                              style: TextStyle(
+                                color: _selectedTabIndex == 0
+                                    ? Colors.white
+                                    : secondaryText,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => setState(() => _selectedTabIndex = 1),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _selectedTabIndex == 1
+                                ? AppTheme.primaryOrange
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(11),
+                          ),
+                          child: Center(
+                            child: Text(
+                              'Interest Groups',
+                              style: TextStyle(
+                                color: _selectedTabIndex == 1
+                                    ? Colors.white
+                                    : secondaryText,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // ── TAB CONTENT ───────────────────────────────────────────────
+              if (_selectedTabIndex == 0) ...[
+                // PENDING REQUESTS
+                pendingReqsAsync.when(
+                  data: (requests) {
+                    if (requests.isEmpty) return const SizedBox.shrink();
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text('Incoming Requests',
+                                style: TextStyle(
+                                    color: primaryText,
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryOrange,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text('${requests.length}',
+                                  style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        ...requests.map((req) => _buildRequestTile(req)),
+                        const SizedBox(height: 16),
+                      ],
+                    );
+                  },
+                  loading: () => const SizedBox.shrink(),
+                  error: (e, _) => const SizedBox.shrink(),
+                ),
+
+                // DIRECT MESSAGES CONVERSATIONS
+                conversationsAsync.when(
+                  data: (conversations) {
+                    if (conversations.isEmpty) {
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 36, horizontal: 20),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: borderColor, width: 1),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(Icons.chat_bubble_outline_rounded,
+                                color: secondaryText.withValues(alpha: 0.5),
+                                size: 40),
+                            const SizedBox(height: 12),
+                            Text('No 1-to-1 Messages Yet',
+                                style: TextStyle(
+                                    color: primaryText,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Enter a student\'s Connection Code to connect privately.',
+                              style:
+                                  TextStyle(color: secondaryText, fontSize: 13),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _showAddConnectionSheet,
+                              icon: const Icon(Icons.person_add_alt_1_rounded,
+                                  size: 16),
+                              label: const Text('Add Connection'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryOrange,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: conversations.length,
+                      separatorBuilder: (_, __) =>
+                          Divider(color: borderColor, height: 1),
+                      itemBuilder: (ctx, index) {
+                        final conv = conversations[index];
+                        final currentUid = user?.uid ?? '';
+                        final partnerUid = conv.participants.firstWhere(
+                            (p) => p != currentUid,
+                            orElse: () => '');
+                        final rawDetails = conv.participantDetails[partnerUid];
+                        final details = rawDetails is Map
+                            ? rawDetails.map(
+                                (key, value) => MapEntry(key.toString(), value))
+                            : const <String, dynamic>{};
+                        final partnerName =
+                            details['name']?.toString() ?? 'Student';
+                        final partnerPhoto = details['photoUrl']?.toString();
+                        final unread =
+                            (conv.unreadCounts[currentUid] as num?)?.toInt() ??
+                                0;
+
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 4),
+                          leading: CircleAvatar(
+                            radius: 22,
+                            backgroundColor: inputFill,
+                            backgroundImage: partnerPhoto != null
+                                ? NetworkImage(partnerPhoto)
+                                : null,
+                            child: partnerPhoto == null
+                                ? Text(
+                                    partnerName.isNotEmpty
+                                        ? partnerName[0].toUpperCase()
+                                        : 'S',
+                                    style: TextStyle(
+                                        color: primaryText,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15))
+                                : null,
+                          ),
+                          title: Text(partnerName,
+                              style: TextStyle(
+                                  color: primaryText,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  fontFamily: 'Outfit')),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 2.0),
+                            child: Text(
+                              conv.lastMessage,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: unread > 0 ? primaryText : secondaryText,
+                                fontWeight: unread > 0
+                                    ? FontWeight.w600
+                                    : FontWeight.normal,
+                                fontSize: 13,
+                                fontFamily: 'Inter',
+                              ),
+                            ),
+                          ),
+                          trailing: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(_formatTime(conv.lastMessageTimestamp),
+                                  style: TextStyle(
+                                      color: secondaryText,
+                                      fontSize: 11,
+                                      fontFamily: 'Inter')),
+                              if (unread > 0) ...[
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.primaryOrange,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text('$unread',
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ],
+                          ),
+                          onTap: () {
+                            context.push('/chat/${conv.id}', extra: {
+                              'partnerUid': partnerUid,
+                              'partnerName': partnerName,
+                              'partnerPhoto': partnerPhoto,
+                            });
+                          },
+                        );
                       },
                     );
                   },
-                );
-              },
-              loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryOrange)),
-              error: (e, _) => Center(child: Text('Error loading chats: $e', style: const TextStyle(color: Colors.white54))),
-            ),
-          ],
+                  loading: () => const Center(
+                      child: CircularProgressIndicator(
+                          color: AppTheme.primaryOrange)),
+                  error: (e, _) => Center(
+                      child: Text("We couldn't load chats. Please try again.",
+                          style: TextStyle(color: secondaryText))),
+                ),
+              ] else ...[
+                // INTEREST GROUPS TAB CONTENT
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Joined Communities',
+                          style: TextStyle(
+                              color: primaryText,
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold)),
+                    ),
+                    TextButton.icon(
+                      onPressed: _showExploreGroupsSheet,
+                      icon: const Icon(Icons.explore_outlined,
+                          size: 16, color: AppTheme.primaryOrange),
+                      label: const Text('Discover',
+                          style: TextStyle(
+                              color: AppTheme.primaryOrange,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12)),
+                    ),
+                    TextButton.icon(
+                      onPressed: _showCreateGroupSheet,
+                      icon: const Icon(Icons.add,
+                          size: 16, color: AppTheme.primaryOrange),
+                      label: const Text('Create',
+                          style: TextStyle(
+                              color: AppTheme.primaryOrange,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+
+                userGroupsAsync.when(
+                  data: (groups) {
+                    if (groups.isEmpty) {
+                      return Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 32, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: cardColor,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: borderColor, width: 1),
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(Icons.groups_outlined,
+                                color: secondaryText.withValues(alpha: 0.5),
+                                size: 40),
+                            const SizedBox(height: 12),
+                            Text('No Joined Communities Yet',
+                                style: TextStyle(
+                                    color: primaryText,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Discover student interest groups or create your own community.',
+                              style:
+                                  TextStyle(color: secondaryText, fontSize: 13),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              onPressed: _showExploreGroupsSheet,
+                              icon:
+                                  const Icon(Icons.explore_outlined, size: 16),
+                              label: const Text('Discover Groups'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.primaryOrange,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.separated(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: groups.length,
+                      separatorBuilder: (_, __) =>
+                          Divider(color: borderColor, height: 1),
+                      itemBuilder: (ctx, index) {
+                        final group = groups[index];
+
+                        return ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 4),
+                          leading: CircleAvatar(
+                            radius: 22,
+                            backgroundColor:
+                                AppTheme.primaryOrange.withValues(alpha: 0.15),
+                            child: Text(
+                              group.name.isNotEmpty
+                                  ? group.name[0].toUpperCase()
+                                  : 'G',
+                              style: const TextStyle(
+                                  color: AppTheme.primaryOrange,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16),
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  group.name,
+                                  style: TextStyle(
+                                      color: primaryText,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 15,
+                                      fontFamily: 'Outfit'),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.primaryOrange
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  group.category,
+                                  style: const TextStyle(
+                                      color: AppTheme.primaryOrange,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 2.0),
+                            child: Text(
+                              group.lastMessageSenderName.isNotEmpty
+                                  ? '${group.lastMessageSenderName}: ${group.lastMessage}'
+                                  : group.lastMessage,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  color: secondaryText,
+                                  fontSize: 13,
+                                  fontFamily: 'Inter'),
+                            ),
+                          ),
+                          trailing: Text(
+                              _formatTime(group.lastMessageTimestamp),
+                              style: TextStyle(
+                                  color: secondaryText,
+                                  fontSize: 11,
+                                  fontFamily: 'Inter')),
+                          onTap: () {
+                            context.push('/group_chat/${group.id}');
+                          },
+                        );
+                      },
+                    );
+                  },
+                  loading: () => const Center(
+                      child: CircularProgressIndicator(
+                          color: AppTheme.primaryOrange)),
+                  error: (e, _) => Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          "We couldn't load communities.",
+                          style: TextStyle(color: secondaryText),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: () => ref.invalidate(userGroupsProvider),
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text('Try again'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _buildRequestTile(ConnectionRequestModel req) {
+    final primaryText = AppTheme.primaryTextColor(context);
+    final secondaryText = AppTheme.secondaryTextColor(context);
+    final cardColor = AppTheme.cardColor(context);
+    final borderColor = AppTheme.cardBorderColor(context);
+    final inputFill = AppTheme.inputFillColor(context);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        color: cardColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: borderColor, width: 1),
       ),
       child: Row(
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: const Color(0xFF3A3A3C),
-            backgroundImage: req.senderPhotoUrl != null ? NetworkImage(req.senderPhotoUrl!) : null,
+            backgroundColor: inputFill,
+            backgroundImage: req.senderPhotoUrl != null
+                ? NetworkImage(req.senderPhotoUrl!)
+                : null,
             child: req.senderPhotoUrl == null
-                ? Text(req.senderName.isNotEmpty ? req.senderName[0].toUpperCase() : 'S', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+                ? Text(
+                    req.senderName.isNotEmpty
+                        ? req.senderName[0].toUpperCase()
+                        : 'S',
+                    style: TextStyle(
+                        color: primaryText,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14))
                 : null,
           ),
           const SizedBox(width: 12),
@@ -383,21 +856,35 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(req.senderName, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                Text('Year ${req.senderYear} · ${req.senderDepartment} Dept', style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                Text(req.senderName,
+                    style: TextStyle(
+                        color: primaryText,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        fontFamily: 'Outfit')),
+                Text('Year ${req.senderYear} · ${req.senderDepartment}',
+                    style: TextStyle(
+                        color: secondaryText,
+                        fontSize: 12,
+                        fontFamily: 'Inter')),
               ],
             ),
           ),
           ElevatedButton(
             onPressed: () async {
               try {
-                await ref.read(chatRepositoryProvider).acceptConnectionRequest(req);
+                await ref
+                    .read(chatRepositoryProvider)
+                    .acceptConnectionRequest(req);
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Connected with ${req.senderName}!')));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text('Connected with ${req.senderName}!')));
                 }
               } catch (e) {
                 if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                      content: Text(
+                          "We couldn't accept that request. Please try again.")));
                 }
               }
             },
@@ -405,22 +892,12 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
               backgroundColor: AppTheme.primaryOrange,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
             ),
-            child: const Text('Accept', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(width: 6),
-          OutlinedButton(
-            onPressed: () async {
-              await ref.read(chatRepositoryProvider).declineConnectionRequest(req.id);
-            },
-            style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.white70,
-              side: const BorderSide(color: Colors.white24),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Decline', style: TextStyle(fontSize: 12)),
+            child: const Text('Accept',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
           ),
         ],
       ),

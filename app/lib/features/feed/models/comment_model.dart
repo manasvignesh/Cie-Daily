@@ -6,7 +6,7 @@ class CommentModel {
   final String content;
   final int likesCount;
   final DateTime createdAt;
-  
+
   // Joined fields
   final String authorName;
   final String? authorAvatar;

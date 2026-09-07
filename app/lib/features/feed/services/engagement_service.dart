@@ -3,9 +3,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final engagementServiceProvider = Provider((ref) => EngagementService(
-  FirebaseFirestore.instance, 
-  FirebaseAuth.instance,
-));
+      FirebaseFirestore.instance,
+      FirebaseAuth.instance,
+    ));
 
 class EngagementService {
   final FirebaseFirestore _firestore;

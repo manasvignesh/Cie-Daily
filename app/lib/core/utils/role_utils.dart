@@ -1,7 +1,7 @@
 enum UserRole {
-  MAIN_ADMIN,
-  CREATOR,
-  STUDENT,
+  mainAdmin,
+  creator,
+  student,
 }
 
 const String mainAdminEmail = 'manasvig43@gmail.com';
@@ -114,28 +114,28 @@ const Set<String> creatorAllowlist = {
 };
 
 UserRole getUserRole(String? rawEmail) {
-  if (rawEmail == null || rawEmail.trim().isEmpty) return UserRole.STUDENT;
+  if (rawEmail == null || rawEmail.trim().isEmpty) return UserRole.student;
   final email = rawEmail.toLowerCase().trim();
-  if (email == mainAdminEmail) return UserRole.MAIN_ADMIN;
-  if (creatorAllowlist.contains(email)) return UserRole.CREATOR;
-  return UserRole.STUDENT;
+  if (email == mainAdminEmail) return UserRole.mainAdmin;
+  if (creatorAllowlist.contains(email)) return UserRole.creator;
+  return UserRole.student;
 }
 
 bool isVerifiedUser(String? rawEmail) {
   final role = getUserRole(rawEmail);
-  return role == UserRole.MAIN_ADMIN || role == UserRole.CREATOR;
+  return role == UserRole.mainAdmin || role == UserRole.creator;
 }
 
 bool canCreateContent(String? rawEmail) {
   final role = getUserRole(rawEmail);
-  return role == UserRole.MAIN_ADMIN || role == UserRole.CREATOR;
+  return role == UserRole.mainAdmin || role == UserRole.creator;
 }
 
 bool canManageAnyContent(String? rawEmail) {
-  return getUserRole(rawEmail) == UserRole.MAIN_ADMIN;
+  return getUserRole(rawEmail) == UserRole.mainAdmin;
 }
 
 bool canHostLiveSpace(String? rawEmail) {
   final role = getUserRole(rawEmail);
-  return role == UserRole.MAIN_ADMIN || role == UserRole.CREATOR;
+  return role == UserRole.mainAdmin || role == UserRole.creator;
 }

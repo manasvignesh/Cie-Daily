@@ -28,7 +28,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void initState() {
     super.initState();
     _pageController = PageController();
-    
+
     // Start tracking first post after build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final posts = ref.read(feedProvider).value;
@@ -71,9 +71,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 onPageChanged: (index) async {
                   setState(() => _currentPageIndex = index);
                   // Report previous post
-                  await ref.read(engagementServiceProvider).stopTrackingAndReport();
+                  await ref
+                      .read(engagementServiceProvider)
+                      .stopTrackingAndReport();
                   // Start tracking new post
-                  ref.read(engagementServiceProvider).startTracking(posts[index].id);
+                  ref
+                      .read(engagementServiceProvider)
+                      .startTracking(posts[index].id);
                 },
                 itemBuilder: (context, index) {
                   final post = posts[index];
@@ -81,10 +85,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     post: post,
                     isVisible: index == _currentPageIndex,
                     onLike: (isLiked) {
-                      ref.read(feedRepositoryProvider).toggleLike(post.id, isLiked);
+                      ref
+                          .read(feedRepositoryProvider)
+                          .toggleLike(post.id, isLiked);
                     },
                     onBookmark: (isBookmarked) {
-                      ref.read(feedRepositoryProvider).toggleBookmark(post.id, isBookmarked);
+                      ref
+                          .read(feedRepositoryProvider)
+                          .toggleBookmark(post.id, isBookmarked);
                     },
                     onComment: () {
                       CommentsBottomSheet.show(context, post.id);
@@ -96,13 +104,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 },
               );
             },
-            loading: () => const Center(child: PostSkeleton()),
-            error: (err, stack) => ErrorState(
-              message: err.toString(),
-              onRetry: () => ref.refresh(feedProvider),
+            loading: () => Container(
+                color: Colors.black,
+                child: const Center(child: PostSkeleton())),
+            error: (err, stack) => Container(
+              color: Colors.black,
+              child: ErrorState(
+                message:
+                    "We couldn't load the feed. Check your connection and try again.",
+                onRetry: () => ref.refresh(feedProvider),
+              ),
             ),
           ),
-          
+
+          // Top gradient for status bar visibility
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 120,
+            child: IgnorePointer(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.6),
+                      Colors.transparent
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
           if (canCreate)
             Positioned(
               top: 0,
@@ -115,14 +151,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     onPressed: () {
                       showModalBottomSheet(
                         context: context,
-                        backgroundColor: const Color(0xFF1C1C1E),
+                        backgroundColor: Colors.transparent,
                         useSafeArea: true,
                         isScrollControlled: true,
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-                        ),
-                        builder: (ctx) => Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+                        builder: (ctx) => Container(
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF13131C),
+                            borderRadius:
+                                BorderRadius.vertical(top: Radius.circular(24)),
+                            border: Border(
+                                top: BorderSide(
+                                    color: Colors.white12, width: 1)),
+                          ),
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,65 +171,95 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               // Handle bar
                               Center(
                                 child: Container(
-                                  width: 36, height: 4,
-                                  margin: const EdgeInsets.only(bottom: 16),
-                                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                                  width: 40,
+                                  height: 4,
+                                  margin: const EdgeInsets.only(bottom: 24),
+                                  decoration: BoxDecoration(
+                                      color: Colors.white24,
+                                      borderRadius: BorderRadius.circular(2)),
                                 ),
                               ),
                               const Padding(
-                                padding: EdgeInsets.only(left: 4, bottom: 16),
+                                padding: EdgeInsets.only(left: 4, bottom: 20),
                                 child: Text(
                                   'Create Post',
                                   style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.bold,
+                                    fontSize: 22,
+                                    fontFamily: 'Outfit',
+                                    fontWeight: FontWeight.w700,
                                     color: Colors.white,
                                   ),
                                 ),
                               ),
                               ListTile(
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                tileColor: Colors.white.withOpacity(0.06),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
+                                tileColor: const Color(0xFF1C1C28),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
                                 leading: Container(
-                                  padding: const EdgeInsets.all(8),
+                                  padding: const EdgeInsets.all(10),
                                   decoration: const BoxDecoration(
-                                    color: Colors.orange,
+                                    color: Color(0xFFFF5A1F),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.video_collection, color: Colors.white),
+                                  child: const Icon(
+                                      Icons.video_collection_rounded,
+                                      color: Colors.white,
+                                      size: 24),
                                 ),
                                 title: const Text(
                                   'Video / Reel Post',
-                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontFamily: 'Outfit',
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16),
                                 ),
-                                subtitle: const Text(
+                                subtitle: Text(
                                   'Supports 9:16 (Reels) and 4:5 formats',
-                                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                                  style: TextStyle(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.6),
+                                      fontFamily: 'Inter',
+                                      fontSize: 13),
                                 ),
                                 onTap: () {
                                   Navigator.pop(ctx);
                                   context.push('/create_video_post');
                                 },
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 12),
                               ListTile(
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                tileColor: Colors.white.withOpacity(0.06),
+                                shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16)),
+                                tileColor: const Color(0xFF1C1C28),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
                                 leading: Container(
-                                  padding: const EdgeInsets.all(8),
+                                  padding: const EdgeInsets.all(10),
                                   decoration: const BoxDecoration(
-                                    color: Colors.blueAccent,
+                                    color: Color(0xFF405DE6),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.article_rounded, color: Colors.white),
+                                  child: const Icon(Icons.article_rounded,
+                                      color: Colors.white, size: 24),
                                 ),
                                 title: const Text(
                                   'Article Post',
-                                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+                                  style: TextStyle(
+                                      color: Colors.white,
+                                      fontFamily: 'Outfit',
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16),
                                 ),
-                                subtitle: const Text(
+                                subtitle: Text(
                                   'Long-form articles and campus drops',
-                                  style: TextStyle(color: Colors.white54, fontSize: 12),
+                                  style: TextStyle(
+                                      color:
+                                          Colors.white.withValues(alpha: 0.6),
+                                      fontFamily: 'Inter',
+                                      fontSize: 13),
                                 ),
                                 onTap: () {
                                   Navigator.pop(ctx);
@@ -200,14 +271,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         ),
                       );
                     },
-                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    backgroundColor: const Color(0xFFFF5A1F),
                     foregroundColor: Colors.white,
                     elevation: 8,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: Colors.white.withOpacity(0.2), width: 1),
+                      side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.12),
+                          width: 1),
                     ),
-                    child: const Icon(Icons.add, size: 28),
+                    child: const Icon(Icons.add_rounded, size: 28),
                   ),
                 ),
               ),

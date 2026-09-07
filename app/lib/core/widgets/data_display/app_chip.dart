@@ -20,27 +20,27 @@ class AppChip extends StatelessWidget {
       label: Text(
         label,
         style: TextStyle(
-          color: isSelected 
-              ? Colors.white 
+          color: isSelected
+              ? Colors.white
               : Theme.of(context).textTheme.bodyMedium?.color,
           fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
         ),
       ),
-      avatar: icon != null 
+      avatar: icon != null
           ? Icon(
               icon,
               size: 16,
-              color: isSelected 
-                  ? Colors.white 
+              color: isSelected
+                  ? Colors.white
                   : Theme.of(context).textTheme.bodyMedium?.color,
-            ) 
+            )
           : null,
-      backgroundColor: isSelected 
-          ? Theme.of(context).colorScheme.primary 
+      backgroundColor: isSelected
+          ? Theme.of(context).colorScheme.primary
           : Theme.of(context).colorScheme.surface,
       side: BorderSide(
-        color: isSelected 
-            ? Colors.transparent 
+        color: isSelected
+            ? Colors.transparent
             : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
       ),
       shape: RoundedRectangleBorder(

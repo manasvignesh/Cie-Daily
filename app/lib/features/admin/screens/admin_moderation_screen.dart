@@ -22,8 +22,14 @@ class AdminModerationScreen extends ConsumerWidget {
             itemCount: posts.length,
             itemBuilder: (context, index) {
               final post = posts[index];
-              return Card(
+              return Container(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF13131C),
+                  borderRadius: BorderRadius.circular(20),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.all(16),
                   child: Column(
@@ -31,10 +37,35 @@ class AdminModerationScreen extends ConsumerWidget {
                     children: [
                       Text(
                         post.title,
-                        style: Theme.of(context).textTheme.titleLarge,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Outfit'),
                       ),
-                      const SizedBox(height: 8),
-                      Text('By: ${post.authorName}'),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: const Color(0xFF1C1C28),
+                            child: Text(
+                                post.authorName.isNotEmpty
+                                    ? post.authorName[0].toUpperCase()
+                                    : '?',
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('By: ${post.authorName}',
+                              style: TextStyle(
+                                  color: Colors.grey[400],
+                                  fontSize: 13,
+                                  fontFamily: 'Inter')),
+                        ],
+                      ),
                       const SizedBox(height: 16),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.end,
@@ -43,17 +74,38 @@ class AdminModerationScreen extends ConsumerWidget {
                             onPressed: () {
                               _showRejectDialog(context, ref, post.id);
                             },
-                            child: const Text('Reject', style: TextStyle(color: Colors.red)),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
+                            ),
+                            child: const Text('Reject',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Inter')),
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton(
                             onPressed: () {
-                              ref.read(moderationActionProvider).approvePost(post.id);
+                              ref
+                                  .read(moderationActionProvider)
+                                  .approvePost(post.id);
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Post approved')),
                               );
                             },
-                            child: const Text('Approve'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 20, vertical: 10),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12)),
+                            ),
+                            child: const Text('Approve',
+                                style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Inter')),
                           ),
                         ],
                       ),
@@ -65,7 +117,9 @@ class AdminModerationScreen extends ConsumerWidget {
           );
         },
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        error: (err, stack) => const Center(
+            child:
+                Text("We couldn't load moderation items. Please try again.")),
       ),
     );
   }
@@ -89,7 +143,9 @@ class AdminModerationScreen extends ConsumerWidget {
           ),
           ElevatedButton(
             onPressed: () {
-              ref.read(moderationActionProvider).rejectPost(postId, controller.text);
+              ref
+                  .read(moderationActionProvider)
+                  .rejectPost(postId, controller.text);
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Post rejected')),

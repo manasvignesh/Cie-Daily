@@ -3,11 +3,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/post_model.dart';
 import '../domain/feed_repository.dart';
+import '../../../core/errors/app_exception.dart';
+import '../../../core/errors/error_mapper.dart';
 
-final feedRepositoryProvider = Provider<FeedRepository>((ref) => FirebaseFeedRepository(
-  FirebaseFirestore.instance,
-  FirebaseAuth.instance,
-));
+final feedRepositoryProvider =
+    Provider<FeedRepository>((ref) => FirebaseFeedRepository(
+          FirebaseFirestore.instance,
+          FirebaseAuth.instance,
+        ));
 
 class FirebaseFeedRepository implements FeedRepository {
   final FirebaseFirestore _firestore;
@@ -19,10 +22,10 @@ class FirebaseFeedRepository implements FeedRepository {
   Future<List<PostModel>> fetchPosts({int offset = 0, int limit = 10}) async {
     try {
       // Note: offset pagination in Firestore requires startAfterDocument.
-      // For simplicity in this migration, we'll just fetch a limit and assume 
+      // For simplicity in this migration, we'll just fetch a limit and assume
       // the caller handles cursor logic later, or we just fetch the first page.
       // Since the original was .range(offset, limit), we simulate it here.
-      
+
       final querySnapshot = await _firestore
           .collection('posts')
           .where('category', isEqualTo: 'Reel')
@@ -32,13 +35,19 @@ class FirebaseFeedRepository implements FeedRepository {
           .get();
 
       final List<PostModel> posts = [];
-      
+
       // Fetch users to join author data
-      final authorIds = querySnapshot.docs.map((doc) => doc.data()['authorId'] as String?).whereType<String>().toSet();
-      
+      final authorIds = querySnapshot.docs
+          .map((doc) => doc.data()['authorId'] as String?)
+          .whereType<String>()
+          .toSet();
+
       final Map<String, Map<String, dynamic>> usersMap = {};
       if (authorIds.isNotEmpty) {
-        final usersSnapshot = await _firestore.collection('users').where(FieldPath.documentId, whereIn: authorIds.toList()).get();
+        final usersSnapshot = await _firestore
+            .collection('users')
+            .where(FieldPath.documentId, whereIn: authorIds.toList())
+            .get();
         for (var userDoc in usersSnapshot.docs) {
           usersMap[userDoc.id] = userDoc.data();
         }
@@ -46,14 +55,14 @@ class FirebaseFeedRepository implements FeedRepository {
 
       final userId = _auth.currentUser?.uid;
 
-
       for (var doc in querySnapshot.docs) {
         final data = doc.data();
         data['id'] = doc.id;
-        
+
         // Handle Timestamp conversion for the model
         if (data['createdAt'] is Timestamp) {
-          data['createdAt'] = (data['createdAt'] as Timestamp).toDate().toIso8601String();
+          data['createdAt'] =
+              (data['createdAt'] as Timestamp).toDate().toIso8601String();
         } else if (data['createdAt'] == null) {
           data['createdAt'] = DateTime.now().toIso8601String();
         }
@@ -72,13 +81,15 @@ class FirebaseFeedRepository implements FeedRepository {
             'avatarUrl': null,
           };
         }
-        
+
         final likedBy = List<String>.from(data['likedBy'] ?? []);
         final bookmarkedBy = List<String>.from(data['bookmarkedBy'] ?? []);
 
-        data['isLikedByCurrentUser'] = userId != null && likedBy.contains(userId);
-        data['isBookmarkedByCurrentUser'] = userId != null && bookmarkedBy.contains(userId);
-        
+        data['isLikedByCurrentUser'] =
+            userId != null && likedBy.contains(userId);
+        data['isBookmarkedByCurrentUser'] =
+            userId != null && bookmarkedBy.contains(userId);
+
         // Filter out unapproved posts locally since we dropped the status query
         if (data['status'] == 'approved') {
           posts.add(PostModel.fromJson(data));
@@ -86,8 +97,8 @@ class FirebaseFeedRepository implements FeedRepository {
       }
 
       return posts;
-    } catch (e) {
-      throw Exception('Failed to load feed: $e');
+    } catch (error, stackTrace) {
+      throw ErrorMapper.normalize(error, stackTrace: stackTrace);
     }
   }
 
@@ -98,17 +109,23 @@ class FirebaseFeedRepository implements FeedRepository {
 
     final postRef = _firestore.collection('posts').doc(postId);
 
-    if (isLiked) {
-      await postRef.update({
-        'likesCount': FieldValue.increment(1),
-        'likedBy': FieldValue.arrayUnion([userId])
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(postRef);
+      if (!snapshot.exists) return;
+      final data = snapshot.data()!;
+      final likedBy = List<String>.from(data['likedBy'] ?? const []);
+      final alreadyLiked = likedBy.contains(userId);
+      if (alreadyLiked == isLiked) return;
+      final currentCount = data['likesCount'] is num
+          ? (data['likesCount'] as num).toInt()
+          : likedBy.length;
+      transaction.update(postRef, {
+        'likesCount': isLiked ? currentCount + 1 : currentCount - 1,
+        'likedBy': isLiked
+            ? FieldValue.arrayUnion([userId])
+            : FieldValue.arrayRemove([userId]),
       });
-    } else {
-      await postRef.update({
-        'likesCount': FieldValue.increment(-1),
-        'likedBy': FieldValue.arrayRemove([userId])
-      });
-    }
+    }).timeout(const Duration(seconds: 10));
   }
 
   @override
@@ -118,15 +135,18 @@ class FirebaseFeedRepository implements FeedRepository {
 
     final postRef = _firestore.collection('posts').doc(postId);
 
-    if (isBookmarked) {
-      await postRef.update({
-        'bookmarkedBy': FieldValue.arrayUnion([userId])
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(postRef);
+      if (!snapshot.exists) return;
+      final bookmarkedBy =
+          List<String>.from(snapshot.data()?['bookmarkedBy'] ?? const []);
+      if (bookmarkedBy.contains(userId) == isBookmarked) return;
+      transaction.update(postRef, {
+        'bookmarkedBy': isBookmarked
+            ? FieldValue.arrayUnion([userId])
+            : FieldValue.arrayRemove([userId]),
       });
-    } else {
-      await postRef.update({
-        'bookmarkedBy': FieldValue.arrayRemove([userId])
-      });
-    }
+    }).timeout(const Duration(seconds: 10));
   }
 
   @override
@@ -144,12 +164,18 @@ class FirebaseFeedRepository implements FeedRepository {
       if (querySnapshot.docs.isEmpty) return [];
 
       final List<PostModel> posts = [];
-      
-      final authorIds = querySnapshot.docs.map((doc) => doc.data()['authorId'] as String?).whereType<String>().toSet();
-      
+
+      final authorIds = querySnapshot.docs
+          .map((doc) => doc.data()['authorId'] as String?)
+          .whereType<String>()
+          .toSet();
+
       final Map<String, Map<String, dynamic>> usersMap = {};
       if (authorIds.isNotEmpty) {
-        final usersSnapshot = await _firestore.collection('users').where(FieldPath.documentId, whereIn: authorIds.toList()).get();
+        final usersSnapshot = await _firestore
+            .collection('users')
+            .where(FieldPath.documentId, whereIn: authorIds.toList())
+            .get();
         for (var userDoc in usersSnapshot.docs) {
           usersMap[userDoc.id] = userDoc.data();
         }
@@ -158,9 +184,10 @@ class FirebaseFeedRepository implements FeedRepository {
       for (var doc in querySnapshot.docs) {
         final data = doc.data();
         data['id'] = doc.id;
-        
+
         if (data['createdAt'] is Timestamp) {
-          data['createdAt'] = (data['createdAt'] as Timestamp).toDate().toIso8601String();
+          data['createdAt'] =
+              (data['createdAt'] as Timestamp).toDate().toIso8601String();
         } else if (data['createdAt'] == null) {
           data['createdAt'] = DateTime.now().toIso8601String();
         }
@@ -178,34 +205,60 @@ class FirebaseFeedRepository implements FeedRepository {
             'avatarUrl': null,
           };
         }
-        
+
         final likedBy = List<String>.from(data['likedBy'] ?? []);
         final bookmarkedBy = List<String>.from(data['bookmarkedBy'] ?? []);
 
-        data['isLikedByCurrentUser'] = userId != null && likedBy.contains(userId);
-        data['isBookmarkedByCurrentUser'] = userId != null && bookmarkedBy.contains(userId);
-        
+        data['isLikedByCurrentUser'] = likedBy.contains(userId);
+        data['isBookmarkedByCurrentUser'] = bookmarkedBy.contains(userId);
+
         posts.add(PostModel.fromJson(data));
       }
 
       return posts;
-    } catch (e) {
-      throw Exception('Failed to load bookmarked posts: $e');
+    } catch (error, stackTrace) {
+      throw ErrorMapper.normalize(error, stackTrace: stackTrace);
     }
   }
 
   @override
   Future<void> createPost(PostModel post) async {
     final userId = _auth.currentUser?.uid;
-    if (userId == null) throw Exception('User not logged in');
+    if (userId == null) {
+      throw const AppException(
+        code: AppErrorCode.unauthenticated,
+        userMessage: 'Sign in again to continue.',
+      );
+    }
 
     try {
-      final postData = {
+      final userDoc = await _firestore.collection('users').doc(userId).get();
+      final userData = userDoc.data();
+      final authorName = userData?['name'] ??
+          userData?['fullName'] ??
+          _auth.currentUser?.displayName ??
+          _auth.currentUser?.email?.split('@').first ??
+          'Student';
+      final authorAvatar = userData?['photoUrl'] ??
+          userData?['avatarUrl'] ??
+          _auth.currentUser?.photoURL;
+      final authorEmail = _auth.currentUser?.email;
+
+      final postData = <String, dynamic>{
         'title': post.title,
         'blocks': post.blocks,
         'category': post.category,
         'estimatedReadTime': post.estimatedReadTime,
         'authorId': userId,
+        'authorName': authorName,
+        'authorAvatar': authorAvatar,
+        'authorEmail': authorEmail,
+        'author': {
+          'name': authorName,
+          'fullName': authorName,
+          'avatarUrl': authorAvatar,
+          'email': authorEmail,
+        },
         'createdAt': FieldValue.serverTimestamp(),
         'likesCount': 0,
         'commentsCount': 0,
@@ -218,18 +271,20 @@ class FirebaseFeedRepository implements FeedRepository {
       if (post.imageUrl != null) {
         postData['mediaUrls'] = [post.imageUrl!];
       }
-      
+
       if (post.videoUrl != null) {
         postData['videoUrl'] = post.videoUrl!;
       }
-      
+
       if (post.aspectRatio != null) {
         postData['aspectRatio'] = post.aspectRatio!;
       }
 
+      // Push fan-out is handled by the trusted Firestore trigger. Keeping it
+      // server-side prevents clients from impersonating notification senders.
       await _firestore.collection('posts').add(postData);
-    } catch (e) {
-      throw Exception('Failed to create post: $e');
+    } catch (error, stackTrace) {
+      throw ErrorMapper.normalize(error, stackTrace: stackTrace);
     }
   }
 }

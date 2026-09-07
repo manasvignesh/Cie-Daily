@@ -11,7 +11,6 @@ import '../../features/feed/screens/home_screen.dart';
 import '../../features/feed/screens/create_video_post_screen.dart';
 import '../../features/feed/screens/create_article_post_screen.dart';
 import '../../features/spaces/screens/spaces_home_screen.dart';
-import '../../features/spaces/screens/active_space_screen.dart';
 import '../../features/feed/screens/single_reel_screen.dart';
 import '../../features/discover/screens/discover_screen.dart';
 import '../../features/discover/screens/article_detail_screen.dart';
@@ -20,7 +19,9 @@ import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/chat/screens/chat_list_screen.dart';
 import '../../features/chat/screens/individual_chat_screen.dart';
+import '../../features/chat/screens/group_chat_screen.dart';
 import '../widgets/navigation/app_bottom_nav.dart';
+import '../theme/app_theme.dart';
 
 import '../../features/admin/widgets/admin_bottom_nav.dart';
 import '../../features/admin/screens/admin_dashboard_screen.dart';
@@ -37,12 +38,63 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     navigatorKey: _rootNavigatorKey,
     initialLocation: '/',
+    errorBuilder: (context, state) {
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundColor(context),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline_rounded,
+                    size: 54, color: AppTheme.primaryOrange),
+                const SizedBox(height: 16),
+                Text(
+                  'Something went wrong',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.primaryTextColor(context),
+                    fontFamily: 'Outfit',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  "We couldn't open this page.",
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: AppTheme.secondaryTextColor(context),
+                    fontFamily: 'Inter',
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: () => context.go('/home'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryOrange,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text('Back to Discover',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
     redirect: (context, state) {
       final isLoggingIn = state.matchedLocation == '/login';
-      
+
       switch (authStatus) {
         case AuthStatus.initial:
-          return '/'; 
+        case AuthStatus.error:
+          return '/';
         case AuthStatus.unauthenticated:
           if (state.matchedLocation == '/') return null;
           return isLoggingIn ? null : '/login';
@@ -74,7 +126,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/login',
         builder: (context, state) => const LoginScreen(),
       ),
-
       GoRoute(
         path: '/profile_setup',
         builder: (context, state) => const ProfileSetupScreen(),
@@ -102,20 +153,45 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
       GoRoute(
-        path: '/spaces/:spaceId',
+        path: '/group_chat/:id',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-          final spaceId = state.pathParameters['spaceId']!;
-          final roomName = state.extra as String?;
-          return ActiveSpaceScreen(spaceId: spaceId, roomName: roomName);
+          final id = state.pathParameters['id']!;
+          return GroupChatScreen(groupId: id);
+        },
+      ),
+      GoRoute(
+        path: '/spaces/:spaceId',
+        parentNavigatorKey: _rootNavigatorKey,
+        redirect: (context, state) => '/spaces',
+      ),
+      GoRoute(
+        path: '/article/:id',
+        name: 'articleDetail',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final articleId = state.pathParameters['id']!;
+          final article = state.extra as PostModel?;
+          return ArticleDetailScreen(
+              articleId: articleId, initialArticle: article);
+        },
+      ),
+      GoRoute(
+        path: '/article_detail',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final article = state.extra as PostModel?;
+          return ArticleDetailScreen(
+              articleId: article?.id, initialArticle: article);
         },
       ),
       GoRoute(
         path: '/discover/article',
         parentNavigatorKey: _rootNavigatorKey,
         builder: (context, state) {
-          final article = state.extra as PostModel;
-          return ArticleDetailScreen(article: article);
+          final article = state.extra as PostModel?;
+          return ArticleDetailScreen(
+              articleId: article?.id, initialArticle: article);
         },
       ),
       GoRoute(
@@ -180,38 +256,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ShellRoute(
         navigatorKey: _shellNavigatorKey,
         builder: (context, state, child) {
-          int index = 0;
-          if (state.matchedLocation.startsWith('/home')) index = 0;
-          if (state.matchedLocation.startsWith('/discover')) index = 1;
-          if (state.matchedLocation.startsWith('/spaces')) index = 2;
-          if (state.matchedLocation.startsWith('/chat')) index = 3;
-          if (state.matchedLocation.startsWith('/profile')) index = 4;
-
-          return Scaffold(
-            extendBody: true,
-            body: child,
-            bottomNavigationBar: AppBottomNav(
-              currentIndex: index,
-              onItemSelected: (i) {
-                switch (i) {
-                  case 0:
-                    context.go('/home');
-                    break;
-                  case 1:
-                    context.go('/discover');
-                    break;
-                  case 2:
-                    context.go('/spaces');
-                    break;
-                  case 3:
-                    context.go('/chat');
-                    break;
-                  case 4:
-                    context.go('/profile');
-                    break;
-                }
-              },
-            ),
+          return MainSwipeShell(
+            location: state.matchedLocation,
+            child: child,
           );
         },
         routes: [
@@ -223,7 +270,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                 path: 'article',
                 builder: (context, state) {
                   final article = state.extra as PostModel;
-                  return ArticleDetailScreen(article: article);
+                  return ArticleDetailScreen(initialArticle: article);
                 },
               ),
             ],
@@ -250,6 +297,98 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           ),
         ],
       ),
+      GoRoute(
+        path: '/profile/:userId',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) {
+          final userId = state.pathParameters['userId']!;
+          return ProfileScreen(targetUserId: userId);
+        },
+      ),
     ],
   );
 });
+
+class MainSwipeShell extends StatefulWidget {
+  final Widget child;
+  final String location;
+
+  const MainSwipeShell({
+    super.key,
+    required this.child,
+    required this.location,
+  });
+
+  @override
+  State<MainSwipeShell> createState() => _MainSwipeShellState();
+}
+
+class _MainSwipeShellState extends State<MainSwipeShell> {
+  static const List<String> _routes = [
+    '/home',
+    '/discover',
+    '/spaces',
+    '/chat',
+    '/profile',
+  ];
+
+  int _calculateIndex(String loc) {
+    if (loc.startsWith('/home')) return 0;
+    if (loc.startsWith('/discover')) return 1;
+    if (loc.startsWith('/spaces')) return 2;
+    if (loc.startsWith('/chat')) return 3;
+    if (loc.startsWith('/profile')) return 4;
+    return 0;
+  }
+
+  bool _isMainRoute(String loc) {
+    return loc == '/home' ||
+        loc == '/discover' ||
+        loc == '/spaces' ||
+        loc == '/chat' ||
+        loc == '/profile';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final currentIndex = _calculateIndex(widget.location);
+    final isTopLevel = _isMainRoute(widget.location);
+
+    return Scaffold(
+      extendBody: true,
+      body: isTopLevel
+          ? AnimatedSwitcher(
+              duration: const Duration(milliseconds: 180),
+              layoutBuilder: (currentChild, previousChildren) {
+                return Stack(
+                  fit: StackFit.expand,
+                  alignment: Alignment.topCenter,
+                  children: <Widget>[
+                    ...previousChildren,
+                    if (currentChild != null) currentChild,
+                  ],
+                );
+              },
+              transitionBuilder: (child, animation) {
+                return FadeTransition(
+                  opacity: animation,
+                  child: child,
+                );
+              },
+              child: KeyedSubtree(
+                key: ValueKey(widget.location),
+                child: widget.child,
+              ),
+            )
+          : widget.child,
+      bottomNavigationBar: AppBottomNav(
+        currentIndex: currentIndex,
+        onItemSelected: (index) {
+          if (currentIndex != index) {
+            context.go(_routes[index]);
+          }
+        },
+      ),
+    );
+  }
+}

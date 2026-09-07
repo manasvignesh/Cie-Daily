@@ -5,10 +5,10 @@ final allUsersProvider = StreamProvider<List<Map<String, dynamic>>>((ref) {
   return FirebaseFirestore.instance
       .collection('users')
       .orderBy('createdAt', descending: true)
+      .limit(200)
       .snapshots()
-      .map((snapshot) => snapshot.docs
-          .map((doc) => {'id': doc.id, ...doc.data()})
-          .toList());
+      .map((snapshot) =>
+          snapshot.docs.map((doc) => {'id': doc.id, ...doc.data()}).toList());
 });
 
 final userManagementProvider = Provider((ref) => UserManagementService());

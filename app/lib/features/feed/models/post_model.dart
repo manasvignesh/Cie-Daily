@@ -1,4 +1,6 @@
 import '../../../core/utils/role_utils.dart';
+import '../../discover/models/article_image_resolver.dart';
+import '../../discover/models/published_article_model.dart';
 
 class PostModel {
   final String id;
@@ -21,6 +23,11 @@ class PostModel {
   final List<String> bookmarkedBy;
   final bool isLikedByCurrentUser;
   final bool isBookmarkedByCurrentUser;
+  final PublishedArticle publishedArticle;
+
+  int get schemaVersion => publishedArticle.schemaVersion;
+  QuickBriefContent? get quickBrief => publishedArticle.quickBrief;
+  FullArticleContent? get fullArticle => publishedArticle.fullArticle;
 
   int get upvotes => likesCount;
   int get commentCount => commentsCount;
@@ -47,44 +54,131 @@ class PostModel {
     this.bookmarkedBy = const [],
     this.isLikedByCurrentUser = false,
     this.isBookmarkedByCurrentUser = false,
-  });
+    PublishedArticle? publishedArticle,
+  }) : publishedArticle = publishedArticle ??
+            PublishedArticle(
+              id: id,
+              schemaVersion: 1,
+              quickBrief: null,
+              fullArticle: null,
+              metadata: const {},
+            );
 
   factory PostModel.fromJson(Map<String, dynamic> json) {
-    final email = json['author']?['email'] as String? ?? json['authorEmail'] as String?;
+    final published = PublishedArticle.fromFirestore(
+      json['id']?.toString() ?? '',
+      json,
+    );
+    final metadata = published.metadata;
+    final author = json['author'] is Map
+        ? Map<String, dynamic>.from(json['author'] as Map)
+        : const <String, dynamic>{};
+    final email =
+        author['email']?.toString() ?? json['authorEmail']?.toString();
+    final rawTitle = json['title']?.toString() ?? '';
+    final rawCategory = json['category']?.toString() ?? 'Discover';
+    final createdAt = _dateValue(json['createdAt']);
+    final mediaUrls = json['mediaUrls'] is List
+        ? (json['mediaUrls'] as List)
+            .map((value) => value?.toString() ?? '')
+            .where((value) => value.isNotEmpty)
+            .toList()
+        : const <String>[];
+    final resolvedImage = resolveArticleImage(
+      candidates: [
+        ...mediaUrls,
+        json['imageUrl'],
+        json['image_url'],
+        json['heroImage'],
+        json['hero_image'],
+        json['coverImage'],
+        json['cover_image'],
+        json['thumbnailUrl'],
+        metadata['hero_image'],
+        metadata['heroImage'],
+        metadata['imageUrl'],
+        metadata['source_image'],
+        metadata['og_image'],
+      ],
+      title: published.quickBrief?.headline.isNotEmpty == true
+          ? published.quickBrief!.headline
+          : rawTitle,
+      category: published.quickBrief?.category.isNotEmpty == true
+          ? published.quickBrief!.category
+          : rawCategory,
+    );
     return PostModel(
-      id: json['id'] as String,
-      title: json['title'] as String? ?? 'Untitled',
-      blocks: json['blocks'] as List<dynamic>? ?? [],
-      estimatedReadTime: json['estimatedReadTime'] as int? ?? 1,
-      category: json['category'] as String? ?? 'Discover',
-      likesCount: json['likesCount'] as int? ?? 0,
-      commentsCount: json['commentsCount'] as int? ?? 0,
-      isTodaysDrop: json['isTodaysDrop'] as bool? ?? false,
-      createdAt: json['createdAt'] != null 
-          ? (json['createdAt'] is String ? DateTime.parse(json['createdAt']) : DateTime.now()) 
-          : DateTime.now(),
-      authorName: json['author']?['fullName'] as String? ?? json['authorName'] as String? ?? 'Anonymous',
-      authorAvatar: json['author']?['avatarUrl'] as String? ?? json['authorAvatar'] as String?,
+      id: json['id']?.toString() ?? '',
+      title: published.schemaVersion >= 2
+          ? (published.quickBrief?.headline.isNotEmpty == true
+              ? published.quickBrief!.headline
+              : (published.fullArticle?.headline.isNotEmpty == true
+                  ? published.fullArticle!.headline
+                  : (rawTitle.isNotEmpty ? rawTitle : 'Untitled')))
+          : rawTitle.isNotEmpty
+              ? rawTitle
+              : 'Untitled',
+      blocks:
+          json['blocks'] is List ? json['blocks'] as List<dynamic> : const [],
+      estimatedReadTime: _intValue(json['estimatedReadTime'] ??
+          json['estimated_read_time'] ??
+          json['read_time'] ??
+          metadata['read_time']),
+      category: published.schemaVersion >= 2
+          ? (published.quickBrief?.category.isNotEmpty == true
+              ? published.quickBrief!.category
+              : rawCategory)
+          : rawCategory,
+      likesCount: _intValue(json['likesCount']),
+      commentsCount: _intValue(json['commentsCount']),
+      isTodaysDrop:
+          json['isTodaysDrop'] is bool ? json['isTodaysDrop'] as bool : false,
+      createdAt: createdAt,
+      authorName: (author['name']?.toString().trim().isNotEmpty == true)
+          ? author['name'].toString()
+          : ((author['fullName']?.toString().trim().isNotEmpty == true)
+              ? author['fullName'].toString()
+              : ((json['authorName']?.toString().trim().isNotEmpty == true &&
+                      json['authorName'] != 'Anonymous')
+                  ? json['authorName'].toString()
+                  : 'Student')),
+      authorAvatar: author['photoUrl']?.toString() ??
+          author['avatarUrl']?.toString() ??
+          json['authorAvatar']?.toString(),
       authorEmail: email,
-      imageUrl: (json['mediaUrls'] as List<dynamic>?)?.isNotEmpty == true ? json['mediaUrls'][0] : json['imageUrl'] as String?,
-      videoUrl: json['videoUrl'] as String?,
-      aspectRatio: json['aspectRatio'] as String?,
-      authorId: json['authorId'] as String?,
-      likedBy: List<String>.from(json['likedBy'] ?? []),
-      bookmarkedBy: List<String>.from(json['bookmarkedBy'] ?? []),
-      isLikedByCurrentUser: json['isLikedByCurrentUser'] as bool? ?? false,
-      isBookmarkedByCurrentUser: json['isBookmarkedByCurrentUser'] as bool? ?? false,
+      imageUrl: resolvedImage,
+      videoUrl: json['videoUrl']?.toString(),
+      aspectRatio: json['aspectRatio']?.toString(),
+      authorId: json['authorId']?.toString(),
+      likedBy: _strings(json['likedBy']),
+      bookmarkedBy: _strings(json['bookmarkedBy']),
+      isLikedByCurrentUser: json['isLikedByCurrentUser'] is bool
+          ? json['isLikedByCurrentUser'] as bool
+          : false,
+      isBookmarkedByCurrentUser: json['isBookmarkedByCurrentUser'] is bool
+          ? json['isBookmarkedByCurrentUser'] as bool
+          : false,
+      publishedArticle: published,
     );
   }
 
   factory PostModel.fromMap(Map<String, dynamic> data, String id) {
     data['id'] = id;
-    
+
     // Convert Firestore Timestamp if present
     if (data['createdAt'] != null && data['createdAt'] is! String) {
-      data['createdAt'] = data['createdAt'].toDate().toIso8601String();
+      final timestamp = data['createdAt'];
+      if (timestamp is DateTime) {
+        data['createdAt'] = timestamp.toIso8601String();
+      } else {
+        try {
+          data['createdAt'] = timestamp.toDate().toIso8601String();
+        } catch (_) {
+          // Keep malformed historical timestamps from dropping the story.
+        }
+      }
     }
-    
+
     return PostModel.fromJson(data);
   }
 
@@ -128,7 +222,36 @@ class PostModel {
       likedBy: likedBy ?? this.likedBy,
       bookmarkedBy: bookmarkedBy ?? this.bookmarkedBy,
       isLikedByCurrentUser: isLikedByCurrentUser ?? this.isLikedByCurrentUser,
-      isBookmarkedByCurrentUser: isBookmarkedByCurrentUser ?? this.isBookmarkedByCurrentUser,
+      isBookmarkedByCurrentUser:
+          isBookmarkedByCurrentUser ?? this.isBookmarkedByCurrentUser,
+      publishedArticle: publishedArticle,
     );
   }
+}
+
+int _intValue(dynamic value) {
+  if (value is int) return value;
+  return int.tryParse(value?.toString() ?? '') ?? 1;
+}
+
+DateTime _dateValue(dynamic value) {
+  if (value is DateTime) return value;
+  if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+  if (value != null) {
+    try {
+      final converted = value.toDate();
+      if (converted is DateTime) return converted;
+    } catch (_) {
+      // Keep malformed historical timestamps from dropping an entire story.
+    }
+  }
+  return DateTime.now();
+}
+
+List<String> _strings(dynamic value) {
+  if (value is! List) return const [];
+  return value
+      .map((item) => item?.toString() ?? '')
+      .where((item) => item.isNotEmpty)
+      .toList();
 }

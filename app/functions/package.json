@@ -1,0 +1,20 @@
+{
+  "name": "cie-daily-functions",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check index.js && node --check livekit_token_handler.js && node --check livekit_token_issuer.js && node --check push_notifications.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.3.0",
+    "firebase-functions": "^7.3.2",
+    "livekit-server-sdk": "^2.0.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
+  }
+}

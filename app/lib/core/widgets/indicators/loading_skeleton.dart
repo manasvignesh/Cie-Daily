@@ -15,16 +15,19 @@ class LoadingSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.1),
+        color: isDark ? const Color(0xFF1C1C28) : Colors.grey.shade200,
         borderRadius: BorderRadius.circular(borderRadius),
       ),
-    )
-        .animate(onPlay: (controller) => controller.repeat())
-        .shimmer(duration: const Duration(seconds: 2), color: Colors.white24);
+    ).animate(onPlay: (controller) => controller.repeat()).shimmer(
+          duration: const Duration(milliseconds: 1500),
+          color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.white60,
+        );
   }
 }
 
@@ -34,28 +37,29 @@ class PostSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Padding(
-      padding: EdgeInsets.all(16.0),
+      padding: EdgeInsets.all(20.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               LoadingSkeleton(width: 48, height: 48, borderRadius: 24),
-              SizedBox(width: 12),
+              SizedBox(width: 16),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  LoadingSkeleton(width: 120, height: 16),
+                  LoadingSkeleton(width: 140, height: 16, borderRadius: 4),
                   SizedBox(height: 8),
-                  LoadingSkeleton(width: 80, height: 12),
+                  LoadingSkeleton(width: 90, height: 12, borderRadius: 4),
                 ],
               ),
             ],
           ),
-          SizedBox(height: 16),
-          LoadingSkeleton(width: double.infinity, height: 200, borderRadius: 16),
-          SizedBox(height: 16),
-          LoadingSkeleton(width: 200, height: 16),
+          SizedBox(height: 20),
+          LoadingSkeleton(
+              width: double.infinity, height: 240, borderRadius: 20),
+          SizedBox(height: 20),
+          LoadingSkeleton(width: 200, height: 16, borderRadius: 4),
         ],
       ),
     );

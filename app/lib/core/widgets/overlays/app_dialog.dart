@@ -12,22 +12,45 @@ class AppDialog {
     VoidCallback? onConfirm,
     bool isDestructive = false,
   }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return showDialog<T>(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
+          backgroundColor:
+              theme.dialogTheme.backgroundColor ?? theme.colorScheme.surface,
+          elevation: isDark ? 24 : 12,
+          shadowColor: Colors.black.withValues(alpha: isDark ? 0.8 : 0.2),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
+            borderRadius: BorderRadius.circular(28),
+            side: isDark
+                ? BorderSide(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    width: 1,
+                  )
+                : BorderSide.none,
           ),
+          titlePadding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
+          contentPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
           title: Text(
             title,
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              letterSpacing: -0.5,
+            ),
+            textAlign: TextAlign.center,
           ),
           content: Text(
             message,
-            style: Theme.of(context).textTheme.bodyLarge,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              height: 1.5,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+            ),
+            textAlign: TextAlign.center,
           ),
-          actionsPadding: const EdgeInsets.all(16),
+          actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
           actions: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -41,7 +64,7 @@ class AppDialog {
                     },
                   ),
                 if (cancelText != null) ...[
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
                   SecondaryButton(
                     text: cancelText,
                     onPressed: () => Navigator.of(context).pop(),

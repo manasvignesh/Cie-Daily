@@ -26,7 +26,10 @@ class InboxScreen extends ConsumerWidget {
               final conv = conversations[index];
               return ListTile(
                 leading: CircleAvatar(
-                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                  backgroundColor: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: 0.1),
                   child: Icon(
                     conv.isGroup ? Icons.group_rounded : Icons.person_rounded,
                     color: Theme.of(context).colorScheme.primary,
@@ -65,7 +68,8 @@ class InboxScreen extends ConsumerWidget {
             ),
           ),
         ),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        error: (err, stack) => const Center(
+            child: Text("We couldn't load your messages. Please try again.")),
       ),
     );
   }

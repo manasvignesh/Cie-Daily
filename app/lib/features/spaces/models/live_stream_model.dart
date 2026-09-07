@@ -9,6 +9,9 @@ class LiveStreamModel {
   final String status;
   final DateTime createdAt;
   final String? roomName;
+  final String? category;
+  final String? description;
+  final int? participantCount;
 
   LiveStreamModel({
     required this.id,
@@ -19,6 +22,9 @@ class LiveStreamModel {
     required this.status,
     required this.createdAt,
     this.roomName,
+    this.category,
+    this.description,
+    this.participantCount,
   });
 
   factory LiveStreamModel.fromMap(Map<String, dynamic> data, String id) {
@@ -38,6 +44,11 @@ class LiveStreamModel {
       }
     }
 
+    final resolvedRoom = (data['roomName'] as String?)?.trim() ??
+        (data['roomId'] as String?)?.trim() ??
+        (data['room_id'] as String?)?.trim() ??
+        (data['room'] as String?)?.trim();
+
     return LiveStreamModel(
       id: id,
       title: data['title'] as String? ?? 'Live Stream',
@@ -46,7 +57,15 @@ class LiveStreamModel {
       hostAvatar: data['hostAvatar'] as String?,
       status: data['status'] as String? ?? 'live',
       createdAt: parsedDate,
-      roomName: data['roomName'] as String?,
+      roomName: (resolvedRoom != null && resolvedRoom.isNotEmpty)
+          ? resolvedRoom
+          : null,
+      category: (data['category'] as String?)?.trim(),
+      description: (data['description'] as String?)?.trim(),
+      participantCount: (data['participantCount'] as num?)?.toInt() ??
+          (data['participants'] is List
+              ? (data['participants'] as List).length
+              : null),
     );
   }
 }

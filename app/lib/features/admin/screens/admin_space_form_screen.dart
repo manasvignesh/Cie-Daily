@@ -27,9 +27,12 @@ class _AdminSpaceFormScreenState extends State<AdminSpaceFormScreen> {
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.initialData?['name']);
-    _descController = TextEditingController(text: widget.initialData?['description']);
-    _coverUrlController = TextEditingController(text: widget.initialData?['coverImageUrl']);
-    _iconUrlController = TextEditingController(text: widget.initialData?['iconUrl']);
+    _descController =
+        TextEditingController(text: widget.initialData?['description']);
+    _coverUrlController =
+        TextEditingController(text: widget.initialData?['coverImageUrl']);
+    _iconUrlController =
+        TextEditingController(text: widget.initialData?['iconUrl']);
     _selectedTechnologyId = widget.initialData?['technologyId'];
 
     _loadTechnologies();
@@ -37,7 +40,8 @@ class _AdminSpaceFormScreenState extends State<AdminSpaceFormScreen> {
 
   Future<void> _loadTechnologies() async {
     try {
-      final snap = await FirebaseFirestore.instance.collection('technologies').get();
+      final snap =
+          await FirebaseFirestore.instance.collection('technologies').get();
       setState(() {
         _technologies = snap.docs.map((d) {
           final data = d.data();
@@ -62,7 +66,8 @@ class _AdminSpaceFormScreenState extends State<AdminSpaceFormScreen> {
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedTechnologyId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a technology')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please select a technology')));
       return;
     }
 
@@ -84,7 +89,10 @@ class _AdminSpaceFormScreenState extends State<AdminSpaceFormScreen> {
         data['moderatorIds'] = [];
         await FirebaseFirestore.instance.collection('spaces').add(data);
       } else {
-        await FirebaseFirestore.instance.collection('spaces').doc(widget.spaceId).update(data);
+        await FirebaseFirestore.instance
+            .collection('spaces')
+            .doc(widget.spaceId)
+            .update(data);
       }
 
       if (mounted) {
@@ -92,13 +100,35 @@ class _AdminSpaceFormScreenState extends State<AdminSpaceFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving space: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text("We couldn't save this space. Please try again.")));
       }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
       }
     }
+  }
+
+  InputDecoration _buildInputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(color: Colors.grey[500], fontFamily: 'Inter'),
+      filled: true,
+      fillColor: const Color(0xFF13131C),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Color(0xFFFF5A1F)),
+      ),
+    );
   }
 
   @override
@@ -118,48 +148,75 @@ class _AdminSpaceFormScreenState extends State<AdminSpaceFormScreen> {
                   children: [
                     TextFormField(
                       controller: _nameController,
-                      decoration: const InputDecoration(labelText: 'Space Name', border: OutlineInputBorder()),
-                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                      style: const TextStyle(
+                          color: Colors.white, fontFamily: 'Inter'),
+                      decoration: _buildInputDecoration('Space Name'),
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Required' : null,
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _descController,
-                      decoration: const InputDecoration(labelText: 'Description', border: OutlineInputBorder()),
+                      style: const TextStyle(
+                          color: Colors.white, fontFamily: 'Inter'),
+                      decoration: _buildInputDecoration('Description'),
                       maxLines: 3,
-                      validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                      validator: (v) =>
+                          v == null || v.isEmpty ? 'Required' : null,
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(labelText: 'Technology', border: OutlineInputBorder()),
-                      value: _selectedTechnologyId,
+                      decoration: _buildInputDecoration('Technology'),
+                      dropdownColor: const Color(0xFF1C1C28),
+                      style: const TextStyle(
+                          color: Colors.white, fontFamily: 'Inter'),
+                      initialValue: _selectedTechnologyId,
                       items: _technologies.map((tech) {
                         return DropdownMenuItem<String>(
                           value: tech['id'],
                           child: Text(tech['name'] ?? 'Unknown'),
                         );
                       }).toList(),
-                      onChanged: (val) => setState(() => _selectedTechnologyId = val),
-                      hint: const Text('Select a technology'),
+                      onChanged: (val) =>
+                          setState(() => _selectedTechnologyId = val),
+                      hint: Text('Select a technology',
+                          style: TextStyle(
+                              color: Colors.grey[600], fontFamily: 'Inter')),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _iconUrlController,
-                      decoration: const InputDecoration(labelText: 'Icon URL', border: OutlineInputBorder()),
+                      style: const TextStyle(
+                          color: Colors.white, fontFamily: 'Inter'),
+                      decoration: _buildInputDecoration('Icon URL'),
                     ),
                     const SizedBox(height: 16),
                     TextFormField(
                       controller: _coverUrlController,
-                      decoration: const InputDecoration(labelText: 'Cover Image URL', border: OutlineInputBorder()),
+                      style: const TextStyle(
+                          color: Colors.white, fontFamily: 'Inter'),
+                      decoration: _buildInputDecoration('Cover Image URL'),
                     ),
                     const SizedBox(height: 32),
                     ElevatedButton(
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),
-                        backgroundColor: Theme.of(context).colorScheme.primary,
-                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                        backgroundColor: const Color(0xFFFF5A1F),
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
                       ),
                       onPressed: _submit,
-                      child: Text(widget.spaceId == null ? 'CREATE SPACE' : 'SAVE CHANGES'),
+                      child: Text(
+                        widget.spaceId == null
+                            ? 'CREATE SPACE'
+                            : 'SAVE CHANGES',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'Outfit',
+                            fontSize: 16,
+                            letterSpacing: 1),
+                      ),
                     ),
                   ],
                 ),

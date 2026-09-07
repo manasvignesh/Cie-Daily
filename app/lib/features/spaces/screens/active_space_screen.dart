@@ -1,6 +1,6 @@
 import 'dart:ui';
+import 'dart:developer' as developer;
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:livekit_client/livekit_client.dart';
@@ -8,9 +8,11 @@ import 'package:flutter_webrtc/flutter_webrtc.dart' show RTCVideoViewObjectFit;
 import '../../../core/theme/app_theme.dart';
 import '../providers/livekit_provider.dart';
 import '../services/livekit_token_service.dart';
-import '../../../features/auth/providers/auth_provider.dart';
+import '../services/live_stage_participants.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import '../../../core/errors/app_exception.dart';
+import '../../../core/errors/error_mapper.dart';
 
 class ActiveSpaceScreen extends ConsumerStatefulWidget {
   final String spaceId;
@@ -26,7 +28,9 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
   late final Room _room;
   late final EventsListener<RoomEvent> _listener;
   bool _isConnected = false;
+  bool _isConnecting = false;
   String? _error;
+  String? _spaceTitle;
   Participant? _pinnedParticipant;
   bool _showChat = false;
   bool _showControls = true;
@@ -36,15 +40,37 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
   @override
   void initState() {
     super.initState();
-    _room = Room();
+    _room = Room(
+      roomOptions: const RoomOptions(
+        adaptiveStream: true,
+        dynacast: true,
+      ),
+    );
     _listener = _room.createListener();
 
     _listener.on<RoomEvent>((event) {
       if (mounted) setState(() {});
+      if (event is ParticipantConnectedEvent) {
+        developer.log(
+          'REMOTE_PARTICIPANTS=${_room.remoteParticipants.length} identity=${event.participant.identity}',
+          name: 'cie_daily.live_join',
+        );
+      }
       if (event is TrackSubscribedEvent) {
-        if (event.publication.source == TrackSource.screenShareVideo) {
+        final kind = event.publication.kind;
+        developer.log(
+          kind == TrackType.VIDEO ? 'VIDEO_SUBSCRIBED' : 'AUDIO_SUBSCRIBED',
+          name: 'cie_daily.live_join',
+        );
+        if (mounted &&
+            event.publication.source == TrackSource.screenShareVideo) {
           setState(() => _pinnedParticipant = event.participant);
         }
+      }
+      if (mounted &&
+          event is ParticipantDisconnectedEvent &&
+          _pinnedParticipant?.identity == event.participant.identity) {
+        setState(() => _pinnedParticipant = null);
       }
     });
 
@@ -62,42 +88,226 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
   }
 
   Future<void> _connect() async {
+    if (_isConnecting) return;
+    _isConnecting = true;
+    var stage = 'refreshing Firestore record';
     try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) throw Exception('Not authenticated');
+      if (_isConnected) {
+        await _room.disconnect();
+      }
+      _isConnected = false;
 
-      var roomName = widget.roomName;
-      if (roomName == null) {
-        final doc = await FirebaseFirestore.instance
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        throw const AppException(
+          code: AppErrorCode.unauthenticated,
+          userMessage: 'Sign in again to join this space.',
+        );
+      }
+
+      // Joining must use authoritative server state. A route argument or an
+      // offline snapshot may describe an older room after an admin restarted it.
+      DocumentSnapshot<Map<String, dynamic>>? doc;
+      try {
+        doc = await FirebaseFirestore.instance
             .collection('liveStreams')
             .doc(widget.spaceId)
-            .get();
-        if (doc.exists) {
-          roomName = doc.data()?['roomName'] as String?;
-        }
-      }
-      roomName ??= 'live_${widget.spaceId}';
+            .get(const GetOptions(source: Source.server));
+      } catch (_) {}
 
-      final token = LiveKitTokenService.generateToken(
-        roomName: roomName,
-        participantIdentity: user.uid,
-        participantName: user.displayName ?? 'User',
+      if (doc == null || !doc.exists) {
+        try {
+          doc = await FirebaseFirestore.instance
+              .collection('liveStreams')
+              .doc(widget.spaceId)
+              .get();
+        } catch (_) {}
+      }
+
+      if (doc == null || !doc.exists) {
+        try {
+          doc = await FirebaseFirestore.instance
+              .collection('live_spaces')
+              .doc(widget.spaceId)
+              .get();
+        } catch (_) {}
+      }
+
+      if (doc == null || !doc.exists) {
+        throw const AppException(
+          code: AppErrorCode.notFound,
+          userMessage: 'This live space is no longer available.',
+        );
+      }
+      final data = doc.data() ?? const <String, dynamic>{};
+      final status = (data['status'] as String?)?.trim().toLowerCase();
+      final endedAt = data['endedAt'];
+      final hostId = _firstNonEmptyString(data, const [
+        'hostId',
+        'presenterId',
+        'createdBy',
+        'authorId',
+        'userId',
+      ]);
+      final roomName = _firstNonEmptyString(data, const [
+        'roomName',
+        'roomId',
+        'room_id',
+        'room',
+        'live_room',
+        'room_name',
+      ]);
+
+      developer.log(
+        'LIVE_JOIN_SELECTED streamDocumentId=${widget.spaceId} status=$status title=${data['title']} hostId=$hostId roomName=$roomName',
+        name: 'cie_daily.live_join',
       );
 
-      await _room.connect(LiveKitTokenService.liveKitUrl, token);
+      _logJoin('fresh_record', {
+        'spaceId': widget.spaceId,
+        'status': status,
+        'roomName': roomName,
+        'liveKitUrl': LiveKitTokenService.liveKitUrl,
+        'hostId': hostId,
+        'startedAt': _logTimestamp(data['startedAt']),
+        'endedAt': _logTimestamp(endedAt),
+      });
+
+      if (status == 'ended' || status == 'cancelled' || endedAt != null) {
+        throw const AppException(
+          code: AppErrorCode.notFound,
+          userMessage: 'This live space is no longer available.',
+        );
+      }
+      if (status != 'live') {
+        throw const AppException(
+          code: AppErrorCode.serviceUnavailable,
+          userMessage: 'This live space has not started yet.',
+          retryable: true,
+        );
+      }
+      if (roomName == null ||
+          roomName.isEmpty ||
+          hostId == null ||
+          hostId.isEmpty) {
+        throw const AppException(
+          code: AppErrorCode.validation,
+          userMessage: 'Invalid live room configuration.',
+        );
+      }
+
+      if (mounted) {
+        setState(() {
+          _spaceTitle = (data['title'] as String?)?.trim() ?? roomName;
+        });
+      }
+
+      stage = 'requesting live access token';
+      late final String token;
+      try {
+        token = await LiveKitTokenService.fetchToken(
+          spaceId: widget.spaceId,
+          roomName: roomName,
+        );
+        _logJoin('token_success', {
+          'spaceId': widget.spaceId,
+          'roomName': roomName,
+          'participantId': user.uid,
+          'tokenLength': token.length,
+        });
+      } catch (error) {
+        _logJoin('token_error', {
+          'spaceId': widget.spaceId,
+          'roomName': roomName,
+          'participantId': user.uid,
+          'errorType': error.runtimeType.toString(),
+          'errorCode': error is AppException ? error.code.name : 'unknown',
+        });
+        if (error is AppException) rethrow;
+        throw AppException(
+          code: AppErrorCode.serviceUnavailable,
+          userMessage: 'Unable to get live access token. Please try again.',
+          cause: error,
+          retryable: true,
+        );
+      }
+
+      stage = 'connecting to LiveKit room';
+      try {
+        await _room.connect(
+          LiveKitTokenService.liveKitUrl,
+          token,
+        );
+        _logJoin('connect_success', {
+          'spaceId': widget.spaceId,
+          'roomName': roomName,
+          'liveKitUrl': LiveKitTokenService.liveKitUrl,
+        });
+      } catch (error) {
+        _logJoin('connect_error', {
+          'spaceId': widget.spaceId,
+          'roomName': roomName,
+          'liveKitUrl': LiveKitTokenService.liveKitUrl,
+          'errorType': error.runtimeType.toString(),
+        });
+        throw AppException(
+          code: AppErrorCode.network,
+          userMessage: 'Unable to connect to live room. Please try again.',
+          cause: error,
+          retryable: true,
+        );
+      }
 
       if (mounted) {
         setState(() => _isConnected = true);
-        final isMuted = ref.read(isAudioMutedProvider);
-        if (!isMuted) {
-          _room.localParticipant?.setMicrophoneEnabled(true);
-        }
+        developer.log(
+          'REMOTE_PARTICIPANTS=${_room.remoteParticipants.length}',
+          name: 'cie_daily.live_join',
+        );
       }
-    } catch (e) {
+    } catch (error, stackTrace) {
+      _logJoin('join_error', {
+        'spaceId': widget.spaceId,
+        'stage': stage,
+        'errorType': error.runtimeType.toString(),
+        'errorCode': error is AppException ? error.code.name : 'unknown',
+      });
+      final appError = ErrorMapper.normalize(
+        error,
+        stackTrace: stackTrace,
+        fallbackMessage:
+            "We couldn't join this space right now. Please try again.",
+      );
       if (mounted) {
-        setState(() => _error = e.toString());
+        setState(() => _error = appError.userMessage);
       }
+    } finally {
+      _isConnecting = false;
     }
+  }
+
+  static String? _firstNonEmptyString(
+    Map<String, dynamic> data,
+    List<String> keys,
+  ) {
+    for (final key in keys) {
+      final value = data[key];
+      if (value is String && value.trim().isNotEmpty) return value.trim();
+    }
+    return null;
+  }
+
+  static String? _logTimestamp(Object? value) {
+    if (value == null) return null;
+    if (value is Timestamp) return value.toDate().toUtc().toIso8601String();
+    return value.toString();
+  }
+
+  static void _logJoin(String event, Map<String, Object?> details) {
+    developer.log(
+      '$event ${details.entries.map((entry) => '${entry.key}=${entry.value}').join(' ')}',
+      name: 'cie_daily.live_spaces',
+    );
   }
 
   Future<void> _sendMessage() async {
@@ -122,7 +332,9 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send: $e')),
+          const SnackBar(
+              content:
+                  Text("We couldn't send that message. Please try again.")),
         );
       }
     }
@@ -155,8 +367,29 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
       backgroundColor: Colors.black,
       body: _error != null
           ? Center(
-              child: Text('Error: $_error',
-                  style: const TextStyle(color: Colors.red)))
+              child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.mic_off_rounded,
+                      color: Colors.white70, size: 48),
+                  const SizedBox(height: 16),
+                  Text(_error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white70)),
+                  const SizedBox(height: 20),
+                  FilledButton.icon(
+                    onPressed: () {
+                      setState(() => _error = null);
+                      _connect();
+                    },
+                    icon: const Icon(Icons.refresh_rounded),
+                    label: const Text('Try Again'),
+                  ),
+                ],
+              ),
+            ))
           : !_isConnected
               ? const Center(child: CircularProgressIndicator())
               : isLandscape
@@ -180,8 +413,7 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
             child: _pinnedParticipant != null
                 ? _VideoRenderer(
                     participant: _pinnedParticipant!,
-                    onTap: () =>
-                        setState(() => _showControls = !_showControls),
+                    onTap: () => setState(() => _showControls = !_showControls),
                   )
                 : (participants.isNotEmpty
                     ? _VideoRenderer(
@@ -196,7 +428,7 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
 
           // Top Header Bar
           if (_showControls)
-            _buildTopBar(context, participants.length),
+            _buildTopBar(context, _room.remoteParticipants.length + 1),
 
           // Thumbnails row at top (below top bar)
           if (participants.length > 1)
@@ -212,8 +444,7 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                   final p = participants[index];
                   if (p == _pinnedParticipant) return const SizedBox();
                   return GestureDetector(
-                    onTap: () =>
-                        setState(() => _pinnedParticipant = p),
+                    onTap: () => setState(() => _pinnedParticipant = p),
                     child: Container(
                       width: 110,
                       margin: const EdgeInsets.only(right: 10),
@@ -227,7 +458,7 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
           // Bottom overlay: chat + controls
           if (_showControls)
             Positioned(
-              bottom: 16,
+              bottom: MediaQuery.paddingOf(context).bottom + 12,
               left: 16,
               right: 16,
               child: Column(
@@ -258,18 +489,22 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.4),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
+              color: const Color(0xFF13131C).withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.1), width: 1),
             ),
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.redAccent.withOpacity(0.2),
+                    color: Colors.redAccent.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.redAccent.withOpacity(0.4), width: 0.5),
+                    border: Border.all(
+                        color: Colors.redAccent.withValues(alpha: 0.4),
+                        width: 0.5),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
@@ -291,7 +526,7 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    widget.roomName ?? 'Live Space',
+                    _spaceTitle ?? widget.roomName ?? 'Live Space',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 15,
@@ -301,14 +536,18 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.12),
+                    color: Colors.white.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.1), width: 1),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.people_alt_rounded, color: Colors.white70, size: 14),
+                      const Icon(Icons.remove_red_eye_rounded,
+                          color: Colors.white70, size: 14),
                       const SizedBox(width: 4),
                       Text(
                         '$participantCount',
@@ -327,10 +566,11 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.25),
+                      color: Colors.redAccent.withValues(alpha: 0.25),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                    child: const Icon(Icons.close_rounded,
+                        color: Colors.white, size: 18),
                   ),
                 ),
               ],
@@ -361,8 +601,8 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                   child: _pinnedParticipant != null
                       ? _VideoRenderer(
                           participant: _pinnedParticipant!,
-                          onTap: () => setState(
-                              () => _showControls = !_showControls),
+                          onTap: () =>
+                              setState(() => _showControls = !_showControls),
                         )
                       : (participants.isNotEmpty
                           ? _VideoRenderer(
@@ -372,8 +612,7 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                             )
                           : const Center(
                               child: Text('Waiting for host...',
-                                  style:
-                                      TextStyle(color: Colors.white70)))),
+                                  style: TextStyle(color: Colors.white70)))),
                 ),
 
                 // Thumbnails row at top-left
@@ -387,14 +626,12 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                           .where((p) => p != _pinnedParticipant)
                           .take(4)
                           .map((p) => GestureDetector(
-                                onTap: () => setState(
-                                    () => _pinnedParticipant = p),
+                                onTap: () =>
+                                    setState(() => _pinnedParticipant = p),
                                 child: Container(
                                   width: 80,
-                                  margin:
-                                      const EdgeInsets.only(right: 6),
-                                  child:
-                                      _ThumbnailWidget(participant: p),
+                                  margin: const EdgeInsets.only(right: 6),
+                                  child: _ThumbnailWidget(participant: p),
                                 ),
                               ))
                           .toList(),
@@ -437,9 +674,8 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                             const SizedBox(width: 24),
                             _controlButton(
                               icon: Icons.chat_rounded,
-                              color: _showChat
-                                  ? Colors.blueAccent
-                                  : Colors.white,
+                              color:
+                                  _showChat ? Colors.blueAccent : Colors.white,
                               onTap: () =>
                                   setState(() => _showChat = !_showChat),
                             ),
@@ -473,10 +709,14 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
   // HELPERS
   // ──────────────────────────────────────────────────────────────
   List<Participant> _getAllParticipants() {
-    return [
-      if (_room.localParticipant != null) _room.localParticipant!,
-      ..._room.remoteParticipants.values,
-    ];
+    return liveStageParticipants<Participant>(
+      remote: _room.remoteParticipants.values,
+      local: _room.localParticipant,
+      hasVideo: (p) => p.videoTrackPublications.any((t) => !t.muted),
+      hasScreenShare: (p) => p.videoTrackPublications
+          .any((t) => !t.muted && t.source == TrackSource.screenShareVideo),
+      identity: (p) => p.identity,
+    );
   }
 
   Widget _controlButton({
@@ -488,14 +728,15 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 42,
-        height: 42,
+        width: 48,
+        height: 48,
         decoration: BoxDecoration(
-          color: backgroundColor ?? Colors.white.withOpacity(0.12),
+          color: backgroundColor ?? Colors.white.withValues(alpha: 0.08),
           shape: BoxShape.circle,
-          border: Border.all(color: Colors.white.withOpacity(0.1), width: 0.5),
+          border:
+              Border.all(color: Colors.white.withValues(alpha: 0.12), width: 1),
         ),
-        child: Icon(icon, color: color, size: 20),
+        child: Icon(icon, color: color, size: 22),
       ),
     );
   }
@@ -509,9 +750,10 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
         child: Container(
           height: height,
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.4),
+            color: Colors.black.withValues(alpha: 0.4),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.12), width: 0.5),
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.12), width: 0.5),
           ),
           child: _buildMessagesList(),
         ),
@@ -529,8 +771,8 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: const BoxDecoration(
-              border: Border(
-                  bottom: BorderSide(color: Colors.white12, width: 0.5)),
+              border:
+                  Border(bottom: BorderSide(color: Colors.white12, width: 0.5)),
             ),
             child: Row(
               children: [
@@ -564,12 +806,13 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
           .doc(widget.spaceId)
           .collection('messages')
           .orderBy('createdAt', descending: true)
+          .limit(100)
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return Center(
-            child: Text('Error: ${snapshot.error}',
-                style: const TextStyle(color: Colors.red, fontSize: 12)),
+          return const Center(
+            child: Text("We couldn't load space messages.",
+                style: TextStyle(color: Colors.red, fontSize: 12)),
           );
         }
         if (!snapshot.hasData) return const SizedBox();
@@ -592,16 +835,15 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                 text: TextSpan(
                   children: [
                     TextSpan(
-                      text: '${data['authorName'] ?? 'User'}: ',
+                      text: '${data['authorName'] ?? 'User'}  ',
                       style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
+                          color: AppTheme.primaryOrange,
                           fontSize: 13),
                     ),
                     TextSpan(
                       text: data['text'] ?? '',
-                      style:
-                          const TextStyle(color: Colors.white, fontSize: 13),
+                      style: const TextStyle(color: Colors.white, fontSize: 13),
                     ),
                   ],
                 ),
@@ -617,8 +859,7 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
       decoration: const BoxDecoration(
-        border:
-            Border(top: BorderSide(color: Colors.white12, width: 0.5)),
+        border: Border(top: BorderSide(color: Colors.white12, width: 0.5)),
       ),
       child: Row(
         children: [
@@ -629,15 +870,25 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
               style: const TextStyle(color: Colors.white, fontSize: 13),
               decoration: InputDecoration(
                 hintText: 'Say something...',
-                hintStyle:
-                    const TextStyle(color: Colors.white38, fontSize: 13),
+                hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
                 filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.1),
+                fillColor: const Color(0xFF13131C),
                 contentPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(20),
-                  borderSide: BorderSide.none,
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.1), width: 1),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.1), width: 1),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide:
+                      const BorderSide(color: AppTheme.primaryOrange, width: 1),
                 ),
                 isDense: true,
               ),
@@ -651,10 +902,11 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
               width: 36,
               height: 36,
               decoration: const BoxDecoration(
-                color: Colors.blueAccent,
+                color: AppTheme.primaryOrange,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.send, color: Colors.white, size: 16),
+              child:
+                  const Icon(Icons.send_rounded, color: Colors.white, size: 18),
             ),
           ),
         ],
@@ -664,6 +916,7 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
 
   // Bottom bar for portrait mode
   Widget _buildBottomBar(bool isMuted) {
+    final isCompact = MediaQuery.sizeOf(context).width < 430;
     return ClipRRect(
       borderRadius: BorderRadius.circular(28),
       child: BackdropFilter(
@@ -671,19 +924,21 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
-            color: Colors.black.withOpacity(0.45),
+            color: Colors.black.withValues(alpha: 0.45),
             borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white.withOpacity(0.15), width: 0.5),
+            border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15), width: 0.5),
           ),
           child: Row(
             children: [
-              // Chat toggle
-              _controlButton(
-                icon: Icons.chat_bubble_rounded,
-                color: _showChat ? AppTheme.primaryOrange : Colors.white70,
-                onTap: () => setState(() => _showChat = !_showChat),
-              ),
-              const SizedBox(width: 8),
+              if (!isCompact) ...[
+                _controlButton(
+                  icon: Icons.chat_bubble_rounded,
+                  color: _showChat ? AppTheme.primaryOrange : Colors.white70,
+                  onTap: () => setState(() => _showChat = !_showChat),
+                ),
+                const SizedBox(width: 8),
+              ],
               // Chat input (inline)
               Expanded(
                 child: TextField(
@@ -692,14 +947,27 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                   style: const TextStyle(color: Colors.white, fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'Say something...',
-                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                    hintStyle: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.5),
+                        fontSize: 13),
                     filled: true,
-                    fillColor: Colors.white.withOpacity(0.1),
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    fillColor: const Color(0xFF13131C).withValues(alpha: 0.8),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.1), width: 1),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.1), width: 1),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(24),
+                      borderSide: const BorderSide(
+                          color: AppTheme.primaryOrange, width: 1),
                     ),
                     isDense: true,
                   ),
@@ -719,7 +987,8 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                     color: AppTheme.primaryOrange,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.send_rounded, color: Colors.white, size: 16),
+                  child: const Icon(Icons.send_rounded,
+                      color: Colors.white, size: 16),
                 ),
               ),
               const SizedBox(width: 8),
@@ -733,7 +1002,7 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
               _controlButton(
                 icon: Icons.call_end_rounded,
                 color: Colors.redAccent,
-                backgroundColor: Colors.redAccent.withOpacity(0.25),
+                backgroundColor: Colors.redAccent.withValues(alpha: 0.25),
                 onTap: () => _room.disconnect(),
               ),
             ],
@@ -758,15 +1027,28 @@ class _VideoRenderer extends StatefulWidget {
 }
 
 class _VideoRendererState extends State<_VideoRenderer> {
-  late final EventsListener<ParticipantEvent> _listener;
+  late EventsListener<ParticipantEvent> _listener;
 
   @override
   void initState() {
     super.initState();
+    _listenToParticipant();
+  }
+
+  void _listenToParticipant() {
     _listener = widget.participant.createListener();
     _listener.on<ParticipantEvent>((event) {
       if (mounted) setState(() {});
     });
+  }
+
+  @override
+  void didUpdateWidget(covariant _VideoRenderer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.participant != widget.participant) {
+      _listener.dispose();
+      _listenToParticipant();
+    }
   }
 
   @override
@@ -782,38 +1064,47 @@ class _VideoRendererState extends State<_VideoRenderer> {
     return GestureDetector(
       onTap: widget.onTap,
       child: Container(
-        color: Colors.black,
-        child: videoTrack != null
-            ? VideoTrackRenderer(
-                videoTrack,
-                fit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
-              )
-            : Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundColor: Colors.white12,
-                      child: Text(
-                        widget.participant.identity.isNotEmpty
-                            ? widget.participant.identity[0].toUpperCase()
-                            : '?',
-                        style:
-                            const TextStyle(fontSize: 28, color: Colors.white),
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: Colors.black,
+          borderRadius: BorderRadius.circular(24),
+          border:
+              Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(23),
+          child: videoTrack != null
+              ? VideoTrackRenderer(
+                  videoTrack,
+                  fit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
+                )
+              : Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundColor: Colors.white12,
+                        child: Text(
+                          widget.participant.identity.isNotEmpty
+                              ? widget.participant.identity[0].toUpperCase()
+                              : '?',
+                          style: const TextStyle(
+                              fontSize: 28, color: Colors.white),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.participant.name.isNotEmpty
-                          ? widget.participant.name
-                          : widget.participant.identity,
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 14),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.participant.name.isNotEmpty
+                            ? widget.participant.name
+                            : widget.participant.identity,
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 14),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+        ),
       ),
     );
   }
@@ -822,16 +1113,14 @@ class _VideoRendererState extends State<_VideoRenderer> {
     // Prioritize screen share
     final screenShare = widget.participant.videoTrackPublications
         .where((pub) =>
-            pub.track != null &&
-            pub.source == TrackSource.screenShareVideo)
+            pub.track != null && pub.source == TrackSource.screenShareVideo)
         .map((pub) => pub.track as VideoTrack)
         .firstOrNull;
     if (screenShare != null) return screenShare;
 
     // Then camera
     final camera = widget.participant.videoTrackPublications
-        .where((pub) =>
-            pub.track != null && pub.source == TrackSource.camera)
+        .where((pub) => pub.track != null && pub.source == TrackSource.camera)
         .map((pub) => pub.track as VideoTrack)
         .firstOrNull;
     if (camera != null) return camera;
@@ -888,13 +1177,15 @@ class _ThumbnailWidgetState extends State<_ThumbnailWidget> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isSpeaking ? AppTheme.primaryOrange : Colors.white.withOpacity(0.15),
+          color: isSpeaking
+              ? AppTheme.primaryOrange
+              : Colors.white.withValues(alpha: 0.15),
           width: isSpeaking ? 2 : 1,
         ),
         boxShadow: isSpeaking
             ? [
                 BoxShadow(
-                  color: AppTheme.primaryOrange.withOpacity(0.5),
+                  color: AppTheme.primaryOrange.withValues(alpha: 0.5),
                   blurRadius: 8,
                   spreadRadius: 1,
                 ),
@@ -904,7 +1195,7 @@ class _ThumbnailWidgetState extends State<_ThumbnailWidget> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(15),
         child: Container(
-          color: Colors.white.withOpacity(0.08),
+          color: Colors.white.withValues(alpha: 0.08),
           child: Stack(
             fit: StackFit.expand,
             children: [
@@ -916,7 +1207,10 @@ class _ThumbnailWidgetState extends State<_ThumbnailWidget> {
                     widget.participant.identity.isNotEmpty
                         ? widget.participant.identity[0].toUpperCase()
                         : '?',
-                    style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               Positioned(
@@ -924,28 +1218,36 @@ class _ThumbnailWidgetState extends State<_ThumbnailWidget> {
                 left: 4,
                 right: 4,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.6),
+                    color: Colors.black.withValues(alpha: 0.6),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white.withOpacity(0.1), width: 0.5),
+                    border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.1), width: 0.5),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       if (isSpeaking)
-                        const Icon(Icons.volume_up_rounded, size: 11, color: AppTheme.primaryOrange)
+                        const Icon(Icons.volume_up_rounded,
+                            size: 11, color: AppTheme.primaryOrange)
                       else if (widget.participant.isMicrophoneEnabled())
-                        const Icon(Icons.mic_rounded, size: 11, color: Colors.white)
+                        const Icon(Icons.mic_rounded,
+                            size: 11, color: Colors.white)
                       else
-                        const Icon(Icons.mic_off_rounded, size: 11, color: Colors.redAccent),
+                        const Icon(Icons.mic_off_rounded,
+                            size: 11, color: Colors.redAccent),
                       const SizedBox(width: 4),
                       Expanded(
                         child: Text(
                           widget.participant.name.isNotEmpty
                               ? widget.participant.name
                               : widget.participant.identity,
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),

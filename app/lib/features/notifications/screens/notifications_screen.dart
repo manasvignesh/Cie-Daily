@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../providers/notifications_provider.dart';
-import '../domain/notification_repository.dart';
 import '../data/firebase_notification_repository.dart';
 import '../../../core/widgets/indicators/loading_skeleton.dart';
+import '../../../core/widgets/indicators/error_state.dart';
+import '../../../core/theme/app_theme.dart';
+import '../services/notification_service.dart';
 
 class NotificationsScreen extends ConsumerWidget {
   const NotificationsScreen({super.key});
@@ -25,24 +28,94 @@ class NotificationsScreen extends ConsumerWidget {
             itemCount: notifications.length,
             itemBuilder: (context, index) {
               final notif = notifications[index];
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: notif.isRead ? Colors.grey.withOpacity(0.2) : Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                  child: Icon(
-                    _getIcon(notif.type),
-                    color: notif.isRead ? Colors.grey : Theme.of(context).colorScheme.primary,
+              return Container(
+                decoration: BoxDecoration(
+                  color: notif.isRead
+                      ? Colors.transparent
+                      : AppTheme.primaryOrange.withValues(alpha: 0.05),
+                  border: Border(
+                      left: BorderSide(
+                          color: notif.isRead
+                              ? Colors.transparent
+                              : AppTheme.primaryOrange,
+                          width: 4)),
+                ),
+                child: ListTile(
+                  contentPadding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  leading:
+                      notif.actorAvatar != null && notif.actorAvatar!.isNotEmpty
+                          ? CircleAvatar(
+                              radius: 20,
+                              backgroundImage: NetworkImage(notif.actorAvatar!),
+                            )
+                          : Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: notif.isRead
+                                    ? AppTheme.surfaceMutedColor(context)
+                                    : AppTheme.primaryOrange
+                                        .withValues(alpha: 0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: Icon(
+                                _getIcon(notif.type),
+                                color: notif.isRead
+                                    ? Colors.grey[500]
+                                    : AppTheme.primaryOrange,
+                                size: 20,
+                              ),
+                            ),
+                  title: Text(
+                    notif.title,
+                    style: TextStyle(
+                      color: AppTheme.primaryTextColor(context),
+                      fontWeight:
+                          notif.isRead ? FontWeight.w500 : FontWeight.bold,
+                      fontSize: 16,
+                      fontFamily: 'Outfit',
+                    ),
                   ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      notif.body,
+                      style: TextStyle(
+                        color: AppTheme.secondaryTextColor(context),
+                        fontSize: 14,
+                        fontFamily: 'Inter',
+                      ),
+                    ),
+                  ),
+                  onTap: () async {
+                    if (!notif.isRead) {
+                      try {
+                        await ref
+                            .read(notificationRepositoryProvider)
+                            .markAsRead(notif.id);
+                      } catch (_) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                  "We couldn't mark this update as read."),
+                            ),
+                          );
+                        }
+                      }
+                    }
+                    if (!context.mounted) return;
+                    final destination = NotificationDestination.fromData({
+                      'type': notif.contentType ?? notif.type,
+                      'contentId': notif.contentId,
+                    });
+                    if (destination != null) {
+                      context.push(destination.route);
+                    } else if (notif.actorId?.isNotEmpty == true) {
+                      context.push('/profile/${notif.actorId}');
+                    }
+                  },
                 ),
-                title: Text(
-                  notif.title,
-                  style: TextStyle(fontWeight: notif.isRead ? FontWeight.normal : FontWeight.bold),
-                ),
-                subtitle: Text(notif.body),
-                onTap: () {
-                  if (!notif.isRead) {
-                    ref.read(notificationRepositoryProvider).markAsRead(notif.id);
-                  }
-                },
               );
             },
           );
@@ -69,17 +142,24 @@ class NotificationsScreen extends ConsumerWidget {
             ),
           ),
         ),
-        error: (err, stack) => Center(child: Text('Error: $err')),
+        error: (err, stack) => ErrorState(
+          message: "We couldn't load notifications. Please try again.",
+          onRetry: () => ref.invalidate(notificationsProvider),
+        ),
       ),
     );
   }
 
   IconData _getIcon(String type) {
     switch (type) {
-      case 'drop': return Icons.local_fire_department_rounded;
-      case 'space': return Icons.mic_rounded;
-      case 'chat': return Icons.chat_bubble_rounded;
-      default: return Icons.notifications_rounded;
+      case 'drop':
+        return Icons.local_fire_department_rounded;
+      case 'space':
+        return Icons.mic_rounded;
+      case 'chat':
+        return Icons.chat_bubble_rounded;
+      default:
+        return Icons.notifications_rounded;
     }
   }
 }

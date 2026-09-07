@@ -1,10 +1,11 @@
-import 'dart:ui';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../providers/profile_provider.dart';
 import '../../feed/models/post_model.dart';
@@ -12,9 +13,66 @@ import '../../../core/utils/role_utils.dart';
 import '../../../core/widgets/verified_badge.dart';
 import '../../../core/widgets/data_display/app_avatar.dart';
 import '../../chat/providers/chat_providers.dart';
+import '../../user/data/firebase_user_repository.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../core/theme/theme_provider.dart';
+import '../../../core/services/cloudinary_service.dart';
+
+String _profileString(
+  Map<String, dynamic>? data,
+  String key, {
+  String fallback = '',
+}) {
+  final value = data?[key];
+  if (value is! String) return fallback;
+  final normalized = value.trim();
+  return normalized.isEmpty ? fallback : normalized;
+}
+
+int _profileCount(
+  Map<String, dynamic>? data, {
+  required String countKey,
+  required String listKey,
+}) {
+  final count = data?[countKey];
+  if (count is num && count.isFinite) return count.toInt().clamp(0, 1 << 31);
+  final list = data?[listKey];
+  return list is List ? list.length : 0;
+}
+
+List<Map<String, dynamic>> _parseHighlights(Object? value) {
+  const defaults = <Map<String, dynamic>>[
+    {'label': 'Campus', 'color': '0xFFFF5A1F'},
+    {'label': 'Events', 'color': '0xFF5856D6'},
+    {'label': 'Sports', 'color': '0xFF34C759'},
+    {'label': 'Art', 'color': '0xFFFF2D55'},
+    {'label': 'Tech', 'color': '0xFF007AFF'},
+  ];
+  if (value == null) {
+    return defaults.map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+  if (value is! Iterable) {
+    return defaults.map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+
+  final highlights = <Map<String, dynamic>>[];
+  for (final item in value) {
+    if (item is! Map) continue;
+    final map = Map<String, dynamic>.from(item);
+    final label = map['label'];
+    if (label is! String || label.trim().isEmpty) continue;
+    highlights.add({
+      'label': label.trim(),
+      if (map['color'] is String) 'color': map['color'],
+    });
+  }
+  return highlights;
+}
 
 class ProfileScreen extends ConsumerStatefulWidget {
-  const ProfileScreen({super.key});
+  final String? targetUserId;
+
+  const ProfileScreen({super.key, this.targetUserId});
 
   @override
   ConsumerState<ProfileScreen> createState() => _ProfileScreenState();
@@ -23,11 +81,6 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  bool _gridView = true;
-
-  // Dynamic stats
-  final int _followersCount = 0;
-  final int _followingCount = 0;
 
   @override
   void initState() {
@@ -45,57 +98,92 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   @override
   Widget build(BuildContext context) {
     final user = FirebaseAuth.instance.currentUser;
-    final userProfileAsync = ref.watch(userProfileProvider);
+    final viewedUid =
+        (widget.targetUserId != null && widget.targetUserId!.isNotEmpty)
+            ? widget.targetUserId!
+            : user?.uid;
+    final isSelf = user != null && (viewedUid == user.uid);
+
+    final userProfileAsync = viewedUid != null && !isSelf
+        ? ref.watch(userProfileStreamProvider(viewedUid))
+        : ref.watch(userProfileProvider);
+
+    final isFollowing = (viewedUid != null && !isSelf)
+        ? ref.watch(isFollowingProvider(viewedUid))
+        : false;
+
     final userPostsAsync = ref.watch(userPostsProvider);
     final bookmarkedPostsAsync = ref.watch(bookmarkedPostsProvider);
     final likedPostsAsync = ref.watch(likedPostsProvider);
     final conversationsAsync = ref.watch(conversationsProvider);
-    final screenSize = MediaQuery.of(context).size;
-
+    final selfConnectionCodeAsync =
+        isSelf ? ref.watch(connectionCodeProvider) : null;
     if (user == null) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: Text('Not logged in', style: TextStyle(color: Colors.white))),
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundColor(context),
+        body: Center(
+          child: Text(
+            'Not logged in',
+            style: TextStyle(color: AppTheme.primaryTextColor(context)),
+          ),
+        ),
       );
     }
 
     final userRole = getUserRole(user.email);
-    final isStudent = userRole == UserRole.STUDENT;
-    final isCreatorOrAdmin = canCreateContent(user.email);
+    final isStudent = userRole == UserRole.student;
 
     return userProfileAsync.when(
       data: (profileData) {
-        final rawName = profileData?['name'] as String? ?? user.displayName ?? '';
-        final emailPrefix = (user.email ?? '').split('@').first;
-        final displayName = rawName.isNotEmpty ? rawName : (emailPrefix.isNotEmpty ? emailPrefix : 'Student');
-        final handle = '@${displayName.toLowerCase().replaceAll(' ', '_').replaceAll(RegExp(r'[^a-z0-9_]'), '')}';
-        
-        final bio = profileData?['bio'] as String? ?? (isStudent ? 'Learning, exploring & connecting on campus ✨' : 'Sharing campus life, one drop at a time ✨');
-        final department = profileData?['department'] as String? ?? 'CS';
+        final rawName = _profileString(
+          profileData,
+          'name',
+          fallback: isSelf ? (user.displayName ?? '') : 'Campus Member',
+        );
+        final profileEmail = _profileString(
+          profileData,
+          'email',
+          fallback: isSelf ? (user.email ?? '') : '',
+        );
+        final emailPrefix = profileEmail.split('@').first;
+        final displayName = rawName.isNotEmpty
+            ? rawName
+            : (emailPrefix.isNotEmpty ? emailPrefix : 'Student');
+        final handle =
+            '@${displayName.toLowerCase().replaceAll(' ', '_').replaceAll(RegExp(r'[^a-z0-9_]'), '')}';
+        final isCreatorOrAdmin = canCreateContent(profileEmail);
+
+        final bio = _profileString(
+          profileData,
+          'bio',
+          fallback: isStudent
+              ? 'Learning, exploring & connecting on campus ✨'
+              : 'Sharing campus life, one drop at a time ✨',
+        );
+        final department =
+            _profileString(profileData, 'department', fallback: 'CS');
         final yearOfStudy = profileData?['yearOfStudy']?.toString() ?? '1';
-        
-        final photoUrl = profileData?['photoUrl'] as String? ?? user.photoURL;
-        final email = user.email ?? '';
+
+        final storedPhotoUrl = _profileString(profileData, 'photoUrl');
+        final photoUrl = storedPhotoUrl.isNotEmpty
+            ? storedPhotoUrl
+            : (isSelf ? user.photoURL : null);
+        final email = profileEmail;
         final postsCount = userPostsAsync.value?.length ?? 0;
         final savedCount = bookmarkedPostsAsync.value?.length ?? 0;
         final likedCount = likedPostsAsync.value?.length ?? 0;
         final connectionsCount = conversationsAsync.value?.length ?? 0;
-        
-        final List<dynamic> rawHighlights = profileData?['highlights'] as List<dynamic>? ?? [
-          {'label': 'Campus', 'color': '0xFFFF5A1F'},
-          {'label': 'Events', 'color': '0xFF5856D6'},
-          {'label': 'Sports', 'color': '0xFF34C759'},
-          {'label': 'Art', 'color': '0xFFFF2D55'},
-          {'label': 'Tech', 'color': '0xFF007AFF'},
-        ];
-        
-        final highlights = rawHighlights.map((h) => Map<String, dynamic>.from(h as Map)).toList();
 
+        final highlights = _parseHighlights(profileData?['highlights']);
+        final connectionCode = selfConnectionCodeAsync?.valueOrNull ??
+            _profileString(profileData, 'connectionCode');
+
+        final isDark = AppTheme.isDark(context);
         return AnnotatedRegion<SystemUiOverlayStyle>(
-          value: SystemUiOverlayStyle.light,
+          value:
+              isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
           child: Scaffold(
-            backgroundColor: Colors.black,
-            extendBodyBehindAppBar: true,
+            backgroundColor: AppTheme.backgroundColor(context),
             appBar: _buildAppBar(
               context,
               displayName: displayName,
@@ -112,23 +200,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── BANNER + AVATAR ────────────────────────────────────
-                      _buildBannerSection(context, photoUrl, displayName, screenSize),
-
-                      // ── BIO SECTION ────────────────────────────────────────
-                      _buildBioSection(
+                      // ── STRUCTURED PROFILE CARD ─────────────────────────────
+                      _buildProfileHeaderCard(
                         context,
+                        photoUrl: photoUrl,
                         displayName: displayName,
                         handle: handle,
                         email: email,
                         bio: bio,
                         department: department,
                         yearOfStudy: yearOfStudy,
-                        connectionCode: profileData?['connectionCode'] as String? ?? '',
+                        connectionCode: connectionCode,
                         isCreatorOrAdmin: isCreatorOrAdmin,
                       ),
 
-                      // ── STATS ROW ──────────────────────────────────────────
+                      // ── STATS DASHBOARD CARD ───────────────────────────────
                       _buildStatsRow(
                         context,
                         isStudent: isStudent,
@@ -136,6 +222,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         savedCount: savedCount,
                         likedCount: likedCount,
                         connectionsCount: connectionsCount,
+                        followersCount: _profileCount(
+                          profileData,
+                          countKey: 'followersCount',
+                          listKey: 'followers',
+                        ),
+                        followingCount: _profileCount(
+                          profileData,
+                          countKey: 'followingCount',
+                          listKey: 'following',
+                        ),
                       ),
 
                       // ── ACTION BUTTONS ─────────────────────────────────────
@@ -147,13 +243,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         yearOfStudy: yearOfStudy,
                         photoUrl: photoUrl,
                         highlights: highlights,
+                        isSelf: isSelf,
+                        viewedUid: viewedUid,
+                        isFollowing: isFollowing,
                       ),
 
-                      // ── HIGHLIGHTS ─────────────────────────────────────────
+                      // ── INTERESTS CARD ─────────────────────────────────────
                       _buildHighlights(context, highlights),
-
-                      const SizedBox(height: 4),
-                      const Divider(color: Color(0xFF222222), height: 1),
                     ],
                   ),
                 ),
@@ -177,25 +273,31 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                             context,
                             posts,
                             emptyTitle: 'No Saved Drops Yet',
-                            emptyMessage: 'Bookmark articles and reels in your feed to read or watch later!',
+                            emptyMessage:
+                                'Bookmark articles and reels in your feed to read or watch later!',
                             emptyIcon: Icons.bookmark_border_rounded,
                           ),
-                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-                          error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                          loading: () => const Center(
+                              child: CircularProgressIndicator(
+                                  color: Color(0xFFFF5A1F))),
+                          error: (e, _) => _buildTabError(context, e),
                         ),
                         // STUDENT TAB 2: Connections List
-                        _buildConnectionsTab(context, profileData?['connectionCode'] as String? ?? ''),
+                        _buildConnectionsTab(context, connectionCode),
                         // STUDENT TAB 3: Upvoted / Liked Drops
                         likedPostsAsync.when(
                           data: (posts) => _buildPostsGrid(
                             context,
                             posts,
                             emptyTitle: 'No Upvoted Drops Yet',
-                            emptyMessage: 'Upvote reels and articles in your feed to save them here!',
+                            emptyMessage:
+                                'Upvote reels and articles in your feed to save them here!',
                             emptyIcon: Icons.favorite_border_rounded,
                           ),
-                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-                          error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                          loading: () => const Center(
+                              child: CircularProgressIndicator(
+                                  color: Color(0xFFFF5A1F))),
+                          error: (e, _) => _buildTabError(context, e),
                         ),
                       ]
                     : [
@@ -205,11 +307,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                             context,
                             posts,
                             emptyTitle: 'No Published Drops Yet',
-                            emptyMessage: 'Create your first campus reel or article drop!',
+                            emptyMessage:
+                                'Create your first campus reel or article drop!',
                             emptyIcon: Icons.camera_alt_outlined,
                           ),
-                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-                          error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                          loading: () => const Center(
+                              child: CircularProgressIndicator(
+                                  color: Color(0xFFFF5A1F))),
+                          error: (e, _) => _buildTabError(context, e),
                         ),
                         // CREATOR / ADMIN TAB 2: Saved Drops
                         bookmarkedPostsAsync.when(
@@ -217,11 +322,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                             context,
                             posts,
                             emptyTitle: 'No Saved Posts Yet',
-                            emptyMessage: 'Bookmark posts to save them for later.',
+                            emptyMessage:
+                                'Bookmark posts to save them for later.',
                             emptyIcon: Icons.bookmark_border_rounded,
                           ),
-                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-                          error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                          loading: () => const Center(
+                              child: CircularProgressIndicator(
+                                  color: Color(0xFFFF5A1F))),
+                          error: (e, _) => _buildTabError(context, e),
                         ),
                         // CREATOR / ADMIN TAB 3: Upvoted Drops
                         likedPostsAsync.when(
@@ -232,8 +340,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                             emptyMessage: 'Liked posts will appear here.',
                             emptyIcon: Icons.favorite_border_rounded,
                           ),
-                          loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-                          error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+                          loading: () => const Center(
+                              child: CircularProgressIndicator(
+                                  color: Color(0xFFFF5A1F))),
+                          error: (e, _) => _buildTabError(context, e),
                         ),
                       ],
               ),
@@ -241,8 +351,50 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ),
         );
       },
-      loading: () => const Scaffold(backgroundColor: Colors.black, body: Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F)))),
-      error: (e, _) => Scaffold(backgroundColor: Colors.black, body: Center(child: Text('Error loading profile: $e', style: const TextStyle(color: Colors.white54)))),
+      loading: () => Scaffold(
+        backgroundColor: AppTheme.backgroundColor(context),
+        body: const Center(
+            child: CircularProgressIndicator(color: AppTheme.primaryOrange)),
+      ),
+      error: (e, _) => Scaffold(
+        backgroundColor: AppTheme.backgroundColor(context),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                "We couldn't load this profile. Please try again.",
+                style: TextStyle(color: AppTheme.secondaryTextColor(context)),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () {
+                  if (viewedUid != null && !isSelf) {
+                    ref.invalidate(userProfileStreamProvider(viewedUid));
+                  } else {
+                    ref.invalidate(userProfileProvider);
+                  }
+                },
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try Again'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTabError(BuildContext context, Object error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          "We couldn't load this section. Please try again.",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: AppTheme.secondaryTextColor(context)),
+        ),
+      ),
     );
   }
 
@@ -255,27 +407,35 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required String? photoUrl,
     required bool isCreatorOrAdmin,
   }) {
+    final iconColor = AppTheme.primaryTextColor(context);
     return AppBar(
-      backgroundColor: Colors.transparent,
+      backgroundColor: AppTheme.backgroundColor(context),
       elevation: 0,
-      systemOverlayStyle: SystemUiOverlayStyle.light,
+      systemOverlayStyle: AppTheme.isDark(context)
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
       leading: const SizedBox.shrink(),
       title: Text(
-        displayName,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 18),
+        'Profile',
+        style: TextStyle(
+            color: iconColor,
+            fontWeight: FontWeight.w900,
+            fontSize: 24,
+            fontFamily: 'Outfit',
+            letterSpacing: -0.5),
       ),
       centerTitle: false,
       actions: [
         if (isCreatorOrAdmin)
           IconButton(
-            icon: const Icon(Icons.add_box_outlined, color: Colors.white, size: 26),
+            icon: Icon(Icons.add_box_outlined, color: iconColor, size: 26),
             tooltip: 'Create Post',
             onPressed: () {
               context.push('/create_article_post');
             },
           ),
         IconButton(
-          icon: const Icon(Icons.menu_rounded, color: Colors.white, size: 26),
+          icon: Icon(Icons.menu_rounded, color: iconColor, size: 26),
           tooltip: 'Menu',
           onPressed: () => _showSettingsSheet(
             context,
@@ -290,86 +450,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildBannerSection(BuildContext context, String? photoUrl, String displayName, Size screenSize) {
-    return SizedBox(
-      height: 200,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Blurred banner
-          if (photoUrl != null)
-            ImageFiltered(
-              imageFilter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
-              child: Image.network(photoUrl, fit: BoxFit.cover),
-            ),
-          if (photoUrl == null)
-            Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-              ),
-            ),
-          // Dark overlay
-          Container(color: Colors.black.withOpacity(0.55)),
-          // Bottom fade to black
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: Container(
-              height: 80,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black.withOpacity(0.9)],
-                ),
-              ),
-            ),
-          ),
-          // Avatar
-          Positioned(
-            bottom: 0,
-            left: 20,
-            child: _buildProfileAvatar(photoUrl, displayName),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProfileAvatar(String? photoUrl, String displayName) {
-    return Container(
-      padding: const EdgeInsets.all(3.5),
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [Color(0xFFFBAA3B), Color(0xFFE1306C), Color(0xFF833AB4)],
-          begin: Alignment.topRight,
-          end: Alignment.bottomLeft,
-        ),
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(2.5),
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.black),
-        child: CircleAvatar(
-          radius: 46,
-          backgroundColor: const Color(0xFF1C1C1E),
-          backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
-          child: photoUrl == null
-              ? Text(
-                  displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
-                  style: const TextStyle(fontSize: 36, color: Colors.white, fontWeight: FontWeight.bold),
-                )
-              : null,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBioSection(
+  Widget _buildProfileHeaderCard(
     BuildContext context, {
+    required String? photoUrl,
     required String displayName,
     required String handle,
     required String email,
@@ -379,70 +462,237 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required String connectionCode,
     required bool isCreatorOrAdmin,
   }) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+    final primaryColor = AppTheme.primaryTextColor(context);
+    final secondaryColor = AppTheme.secondaryTextColor(context);
+    final cardColor = AppTheme.cardColor(context);
+    final borderColor = AppTheme.cardBorderColor(context);
+    final isDark = AppTheme.isDark(context);
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header Row: Avatar + Name + Handle + Badges
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(displayName, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-              if (isCreatorOrAdmin) ...[
-                const SizedBox(width: 6),
-                const VerifiedBadge(size: 18),
-              ],
+              _buildProfileAvatar(context, photoUrl, displayName),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            displayName,
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontSize: 22,
+                              fontWeight: FontWeight.w900,
+                              fontFamily: 'Outfit',
+                              letterSpacing: -0.4,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isCreatorOrAdmin) ...[
+                          const SizedBox(width: 6),
+                          const VerifiedBadge(size: 18),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      handle,
+                      style: TextStyle(
+                        color: secondaryColor,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        fontFamily: 'Inter',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // Micro Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryOrange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: AppTheme.primaryOrange.withValues(alpha: 0.25),
+                          width: 1,
+                        ),
+                      ),
+                      child: Text(
+                        'Year $yearOfStudy · $department Dept 📚',
+                        style: const TextStyle(
+                          color: AppTheme.primaryOrange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 3),
-          Text(handle, style: const TextStyle(color: Color(0xFF888888), fontSize: 14, fontWeight: FontWeight.w400)),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
+
+          // Bio Text
           Text(
-            'Year $yearOfStudy · $department Department 📚\n$bio',
-            style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 13.5, height: 1.5),
+            bio,
+            style: TextStyle(
+              color: primaryColor.withValues(alpha: 0.9),
+              fontSize: 14,
+              height: 1.45,
+              fontFamily: 'Inter',
+            ),
           ),
+
           if (email.isNotEmpty) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Row(
               children: [
-                const Icon(Icons.mail_outline_rounded, color: Color(0xFF888888), size: 14),
-                const SizedBox(width: 5),
-                Text(email, style: const TextStyle(color: Color(0xFF888888), fontSize: 12.5)),
+                Icon(Icons.mail_outline_rounded,
+                    color: secondaryColor, size: 14),
+                const SizedBox(width: 6),
+                Text(
+                  email,
+                  style: TextStyle(
+                    color: secondaryColor,
+                    fontSize: 12.5,
+                    fontFamily: 'Inter',
+                  ),
+                ),
               ],
             ),
           ],
+
           if (connectionCode.isNotEmpty) ...[
-            const SizedBox(height: 10),
+            Container(
+              margin: const EdgeInsets.only(top: 14),
+              height: 1,
+              color: borderColor,
+            ),
+            const SizedBox(height: 14),
             GestureDetector(
               onTap: () {
                 Clipboard.setData(ClipboardData(text: connectionCode));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Connection code copied to clipboard!'), duration: Duration(seconds: 2)),
+                  const SnackBar(
+                    content: Text('Connection code copied to clipboard!'),
+                    duration: Duration(seconds: 2),
+                  ),
                 );
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF5A1F).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFFF5A1F).withOpacity(0.3)),
+                  color: AppTheme.surfaceMutedColor(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: borderColor, width: 1),
                 ),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.qr_code_rounded, color: Color(0xFFFF5A1F), size: 16),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Connection Code: $connectionCode',
-                      style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryOrange.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.qr_code_rounded,
+                          color: AppTheme.primaryOrange, size: 18),
                     ),
-                    const SizedBox(width: 8),
-                    const Icon(Icons.copy_rounded, color: Colors.white70, size: 14),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Connection Code',
+                            style: TextStyle(
+                              color: secondaryColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'Inter',
+                            ),
+                          ),
+                          Text(
+                            connectionCode,
+                            style: TextStyle(
+                              color: primaryColor,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w900,
+                              fontFamily: 'Outfit',
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primaryOrange.withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.copy_rounded,
+                          color: AppTheme.primaryOrange, size: 16),
+                    ),
                   ],
                 ),
               ),
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildProfileAvatar(
+      BuildContext context, String? photoUrl, String displayName) {
+    return Container(
+      padding: const EdgeInsets.all(2.5),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: AppTheme.primaryOrange, width: 2.0),
+      ),
+      child: CircleAvatar(
+        radius: 40,
+        backgroundColor: AppTheme.inputFillColor(context),
+        backgroundImage: photoUrl != null ? NetworkImage(photoUrl) : null,
+        child: photoUrl == null
+            ? Text(
+                displayName.isNotEmpty ? displayName[0].toUpperCase() : 'U',
+                style: TextStyle(
+                    fontSize: 28,
+                    color: AppTheme.primaryTextColor(context),
+                    fontWeight: FontWeight.w900,
+                    fontFamily: 'Outfit'),
+              )
+            : null,
       ),
     );
   }
@@ -454,32 +704,52 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required int savedCount,
     required int likedCount,
     required int connectionsCount,
+    required int followersCount,
+    required int followingCount,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+    final cardColor = AppTheme.cardColor(context);
+    final borderColor = AppTheme.cardBorderColor(context);
+    final isDark = AppTheme.isDark(context);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: isStudent
             ? [
                 _StatBox(count: savedCount, label: 'Saved Drops'),
-                _buildStatDivider(),
+                _buildStatDivider(context),
                 _StatBox(count: connectionsCount, label: 'Connections'),
-                _buildStatDivider(),
+                _buildStatDivider(context),
                 _StatBox(count: likedCount, label: 'Upvoted'),
               ]
             : [
                 _StatBox(count: postsCount, label: 'Published'),
-                _buildStatDivider(),
-                _StatBox(count: _followersCount, label: 'Followers'),
-                _buildStatDivider(),
-                _StatBox(count: _followingCount, label: 'Following'),
+                _buildStatDivider(context),
+                _StatBox(count: followersCount, label: 'Followers'),
+                _buildStatDivider(context),
+                _StatBox(count: followingCount, label: 'Following'),
               ],
       ),
     );
   }
 
-  Widget _buildStatDivider() {
-    return Container(width: 1, height: 30, color: const Color(0xFF2C2C2E));
+  Widget _buildStatDivider(BuildContext context) {
+    return Container(
+        width: 1, height: 28, color: AppTheme.cardBorderColor(context));
   }
 
   Widget _buildActionButtons(
@@ -490,46 +760,97 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required String yearOfStudy,
     required String? photoUrl,
     required List<Map<String, dynamic>> highlights,
+    required bool isSelf,
+    required String? viewedUid,
+    required bool isFollowing,
   }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        children: [
-          Expanded(
-            child: _ProfileActionBtn(
-              label: 'Edit Profile',
-              onTap: () => _showEditProfileSheet(
-                context,
-                name: name,
-                bio: bio,
-                department: department,
-                yearOfStudy: yearOfStudy,
-                photoUrl: photoUrl,
-              ),
-              filled: false,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: isSelf
+          ? Row(
+              children: [
+                Expanded(
+                  child: _ProfileActionBtn(
+                    label: 'Edit Profile',
+                    onTap: () => _showEditProfileSheet(
+                      context,
+                      name: name,
+                      bio: bio,
+                      department: department,
+                      yearOfStudy: yearOfStudy,
+                      photoUrl: photoUrl,
+                    ),
+                    filled: false,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _ProfileActionBtn(
+                    label: 'Share Profile',
+                    onTap: () => _shareProfile(context, name),
+                    filled: false,
+                  ),
+                ),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      final currentUser = FirebaseAuth.instance.currentUser;
+                      if (currentUser != null && viewedUid != null) {
+                        ref.read(userRepositoryProvider).toggleFollowUser(
+                              currentUserId: currentUser.uid,
+                              targetUserId: viewedUid,
+                              follow: !isFollowing,
+                            );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isFollowing
+                          ? AppTheme.surfaceMutedColor(context)
+                          : AppTheme.primaryOrange,
+                      foregroundColor: isFollowing
+                          ? AppTheme.primaryTextColor(context)
+                          : Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: BorderSide(
+                          color: isFollowing
+                              ? AppTheme.cardBorderColor(context)
+                              : AppTheme.primaryOrange,
+                        ),
+                      ),
+                    ),
+                    child: Text(
+                      isFollowing ? 'Following' : 'Follow',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _ProfileActionBtn(
+                    label: 'Share Profile',
+                    onTap: () => _shareProfile(context, name),
+                    filled: false,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _ProfileActionBtn(
-              label: 'Share Profile',
-              onTap: () => _shareProfile(context, name),
-              filled: false,
-            ),
-          ),
-        ],
-      ),
     );
   }
 
   void _shareProfile(BuildContext context, String displayName) {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
-    
+
     Clipboard.setData(ClipboardData(
-      text: 'Check out $displayName on CIE Connect! Email: ${user.email}'
-    ));
-    
+        text: 'Check out $displayName on CIE Connect! Email: ${user.email}'));
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text('Profile details copied to clipboard!'),
@@ -538,72 +859,114 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildHighlights(BuildContext context, List<Map<String, dynamic>> highlights) {
+  Widget _buildHighlights(
+      BuildContext context, List<Map<String, dynamic>> highlights) {
+    final primaryText = AppTheme.primaryTextColor(context);
+    final cardColor = AppTheme.cardColor(context);
+    final borderColor = AppTheme.cardBorderColor(context);
+    final isDark = AppTheme.isDark(context);
+
     return Container(
-      height: 95,
-      margin: const EdgeInsets.only(top: 16),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        itemCount: highlights.length + 1,
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return _buildAddHighlightCircle(context, highlights);
-          }
-          final item = highlights[index - 1];
-          final colorVal = int.tryParse(item['color'] as String? ?? '') ?? 0xFFFF5A1F;
-          return _buildHighlightCircle(item['label'] as String? ?? 'Spotlight', Color(colorVal));
-        },
-      ),
-    );
-  }
-
-  Widget _buildAddHighlightCircle(BuildContext context, List<Map<String, dynamic>> currentHighlights) {
-    return GestureDetector(
-      onTap: () => _showAddHighlightSheet(context, currentHighlights),
-      child: Padding(
-        padding: const EdgeInsets.only(right: 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 60, height: 60,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: const Color(0xFF333333), width: 1.5),
-                color: const Color(0xFF111111),
-              ),
-              child: const Icon(Icons.add_rounded, color: Colors.white, size: 28),
-            ),
-            const SizedBox(height: 6),
-            const Text('New', style: TextStyle(color: Color(0xFF888888), fontSize: 11)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHighlightCircle(String label, Color color) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 60, height: 60,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [color, color.withOpacity(0.5)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              boxShadow: [BoxShadow(color: color.withOpacity(0.35), blurRadius: 10, spreadRadius: 1)],
-            ),
-            child: const Icon(Icons.auto_stories_rounded, color: Colors.white, size: 26),
+      margin: const EdgeInsets.fromLTRB(16, 4, 16, 16),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
           ),
-          const SizedBox(height: 6),
-          Text(label, style: const TextStyle(color: Color(0xFFCCCCCC), fontSize: 11)),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Interests & Focus Areas',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: primaryText,
+                  fontFamily: 'Outfit',
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _showAddHighlightSheet(context, highlights),
+                child: Text(
+                  highlights.isEmpty ? '+ Add interests' : 'Edit',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppTheme.primaryOrange,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(height: 1, color: borderColor),
+          const SizedBox(height: 12),
+          if (highlights.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: highlights.map((h) {
+                final label = _profileString(h, 'label', fallback: 'Campus');
+                return Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceMutedColor(context),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: borderColor, width: 1),
+                  ),
+                  child: Text(
+                    label,
+                    style: TextStyle(
+                      color: primaryText,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      fontFamily: 'Inter',
+                    ),
+                  ),
+                );
+              }).toList(),
+            )
+          else
+            GestureDetector(
+              onTap: () => _showAddHighlightSheet(context, highlights),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.inputFillColor(context),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor, width: 1),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add_rounded,
+                        size: 16, color: AppTheme.primaryOrange),
+                    SizedBox(width: 6),
+                    Text(
+                      'Add interests',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.primaryOrange),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -620,11 +983,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       return _buildEmptyTab(context, emptyIcon, emptyTitle, emptyMessage);
     }
     return GridView.builder(
-      padding: const EdgeInsets.all(2),
+      padding: EdgeInsets.fromLTRB(
+        12,
+        12,
+        12,
+        112 + MediaQuery.paddingOf(context).bottom,
+      ),
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 3,
-        crossAxisSpacing: 2,
-        mainAxisSpacing: 2,
+        crossAxisSpacing: 8,
+        mainAxisSpacing: 8,
         childAspectRatio: 1,
       ),
       itemCount: posts.length,
@@ -639,60 +1007,90 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     return conversationsAsync.when(
       data: (conversations) {
         if (conversations.isEmpty) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.people_outline_rounded, size: 54, color: Colors.white.withOpacity(0.3)),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'No Campus Connections Yet',
-                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Share your Connection Code with peers in CIE Chat to link accounts and share drops!',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white54, fontSize: 13),
-                  ),
-                  const SizedBox(height: 16),
-                  if (connectionCode.isNotEmpty)
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF5A1F),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final bottomInset = 112 + MediaQuery.paddingOf(context).bottom;
+              final minContentHeight = constraints.maxHeight > bottomInset
+                  ? constraints.maxHeight - bottomInset
+                  : 0.0;
+              return SingleChildScrollView(
+                padding: EdgeInsets.fromLTRB(24, 24, 24, bottomInset),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: minContentHeight),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.people_outline_rounded,
+                          size: 54, color: AppTheme.tertiaryTextColor(context)),
+                      const SizedBox(height: 12),
+                      Text(
+                        'No Campus Connections Yet',
+                        style: TextStyle(
+                            color: AppTheme.primaryTextColor(context),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold),
                       ),
-                      onPressed: () {
-                        Clipboard.setData(ClipboardData(text: connectionCode));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Connection Code copied!')),
-                        );
-                      },
-                      icon: const Icon(Icons.copy_rounded, size: 16),
-                      label: Text('Copy Code: $connectionCode'),
-                    ),
-                ],
-              ),
-            ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Share your Connection Code with peers in CIE Chat to link accounts and share drops!',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: AppTheme.secondaryTextColor(context),
+                            fontSize: 13,
+                            height: 1.45),
+                      ),
+                      const SizedBox(height: 16),
+                      if (connectionCode.isNotEmpty)
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFF5A1F),
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(20)),
+                          ),
+                          onPressed: () {
+                            Clipboard.setData(
+                                ClipboardData(text: connectionCode));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Connection Code copied!')),
+                            );
+                          },
+                          icon: const Icon(Icons.copy_rounded, size: 16),
+                          label: Text('Copy Code: $connectionCode'),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            },
           );
         }
 
         return ListView.separated(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.fromLTRB(
+            12,
+            12,
+            12,
+            112 + MediaQuery.paddingOf(context).bottom,
+          ),
           itemCount: conversations.length,
-          separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 1),
+          separatorBuilder: (_, __) =>
+              Divider(color: AppTheme.cardBorderColor(context), height: 1),
           itemBuilder: (context, index) {
             final conv = conversations[index];
             final partnerId = conv.participants.firstWhere(
               (id) => id != currentUser?.uid,
               orElse: () => '',
             );
-            final details = conv.participantDetails[partnerId] as Map<String, dynamic>?;
-            final partnerName = details?['name'] as String? ?? 'Student';
-            final partnerAvatar = details?['photoUrl'] as String?;
+            final rawDetails = conv.participantDetails[partnerId];
+            final details = rawDetails is Map
+                ? rawDetails.map(
+                    (key, value) => MapEntry(key.toString(), value),
+                  )
+                : const <String, dynamic>{};
+            final partnerName = details['name']?.toString() ?? 'Student';
+            final partnerAvatar = details['photoUrl']?.toString();
 
             return ListTile(
               leading: AppAvatar(
@@ -702,19 +1100,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               ),
               title: Text(
                 partnerName,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: AppTheme.primaryTextColor(context),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15),
               ),
-              subtitle: const Text(
+              subtitle: Text(
                 'Connected Peer',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
+                style: TextStyle(
+                    color: AppTheme.secondaryTextColor(context), fontSize: 12),
               ),
               trailing: IconButton(
-                icon: const Icon(Icons.chat_bubble_outline_rounded, color: Color(0xFFFF5A1F)),
+                icon: const Icon(Icons.chat_bubble_outline_rounded,
+                    color: Color(0xFFFF5A1F)),
                 onPressed: () {
-                  context.push('/chat/conversation/${conv.id}', extra: {
+                  context.push('/chat/${conv.id}', extra: {
                     'partnerUid': partnerId,
                     'partnerName': partnerName,
-                    'partnerPhotoUrl': partnerAvatar,
+                    'partnerPhoto': partnerAvatar,
                   });
                 },
               ),
@@ -722,33 +1127,52 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           },
         );
       },
-      loading: () => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-      error: (e, _) => Center(child: Text('Error: $e', style: const TextStyle(color: Colors.white54))),
+      loading: () => const Center(
+          child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
+      error: (e, _) => _buildTabError(context, e),
     );
   }
 
-  Widget _buildEmptyTab(BuildContext context, IconData icon, String title, String subtitle) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 54, color: Colors.white.withOpacity(0.3)),
-            const SizedBox(height: 12),
-            Text(
-              title,
-              style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+  Widget _buildEmptyTab(
+      BuildContext context, IconData icon, String title, String subtitle) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final bottomInset = 112 + MediaQuery.paddingOf(context).bottom;
+        final minContentHeight = constraints.maxHeight > bottomInset
+            ? constraints.maxHeight - bottomInset
+            : 0.0;
+        return SingleChildScrollView(
+          padding: EdgeInsets.fromLTRB(24, 24, 24, bottomInset),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(minHeight: minContentHeight),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(icon,
+                    size: 48, color: AppTheme.tertiaryTextColor(context)),
+                const SizedBox(height: 12),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: AppTheme.primaryTextColor(context),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: AppTheme.secondaryTextColor(context),
+                      fontSize: 13,
+                      height: 1.45),
+                ),
+              ],
             ),
-            const SizedBox(height: 6),
-            Text(
-              subtitle,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white54, fontSize: 13),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -765,59 +1189,82 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           context.push('/discover/article', extra: post);
         }
       },
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // Background
-          if (hasImage)
-            Image.network(
-              post.imageUrl!,
-              fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => _buildGradientPlaceholder(hue),
-            )
-          else
-            _buildGradientPlaceholder(hue),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border:
+              Border.all(color: AppTheme.cardBorderColor(context), width: 1),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Background
+              if (hasImage)
+                Image.network(
+                  post.imageUrl!,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _buildGradientPlaceholder(hue),
+                )
+              else
+                _buildGradientPlaceholder(hue),
 
-          // Video indicator
-          if (hasVideo && !hasImage)
-            Center(
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  shape: BoxShape.circle,
+              // Video indicator
+              if (hasVideo && !hasImage)
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.5),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.play_arrow_rounded,
+                        color: Colors.white, size: 28),
+                  ),
+                )
+              else if (hasVideo)
+                const Positioned(
+                  top: 6,
+                  right: 6,
+                  child: Icon(Icons.play_circle_filled_rounded,
+                      color: Colors.white,
+                      size: 22,
+                      shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
                 ),
-                child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 28),
-              ),
-            )
-          else if (hasVideo)
-            const Positioned(
-              top: 6, right: 6,
-              child: Icon(Icons.play_circle_filled_rounded, color: Colors.white, size: 22,
-                shadows: [Shadow(color: Colors.black, blurRadius: 6)]),
-            ),
 
-          // Title overlay at bottom
-          Positioned(
-            bottom: 0, left: 0, right: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(6, 20, 6, 6),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Colors.transparent, Colors.black.withOpacity(0.75)],
+              // Title overlay at bottom
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(6, 20, 6, 6),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.75)
+                      ],
+                    ),
+                  ),
+                  child: Text(
+                    post.title,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        height: 1.2),
+                  ),
                 ),
               ),
-              child: Text(
-                post.title,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600, height: 1.2),
-              ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -837,7 +1284,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  void _showAddHighlightSheet(BuildContext context, List<Map<String, dynamic>> currentHighlights) {
+  void _showAddHighlightSheet(
+      BuildContext context, List<Map<String, dynamic>> currentHighlights) {
     final labelCtrl = TextEditingController();
     Color selectedColor = const Color(0xFFFF5A1F);
 
@@ -858,29 +1306,53 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       builder: (ctx) => StatefulBuilder(
         builder: (context, setSheetState) => Container(
           margin: const EdgeInsets.all(12),
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 16, left: 20, right: 20),
-          decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(24)),
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              top: 16,
+              left: 20,
+              right: 20),
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor(context),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppTheme.cardBorderColor(context)),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+              Center(
+                  child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                          color: AppTheme.tertiaryTextColor(context),
+                          borderRadius: BorderRadius.circular(2)))),
               const SizedBox(height: 16),
-              const Text('New Highlight', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+              Text('New Highlight',
+                  style: TextStyle(
+                      color: AppTheme.primaryTextColor(context),
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold)),
               const SizedBox(height: 16),
               TextField(
                 controller: labelCtrl,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: AppTheme.primaryTextColor(context)),
                 decoration: InputDecoration(
                   labelText: 'Highlight Title',
-                  labelStyle: const TextStyle(color: Colors.white70),
+                  labelStyle:
+                      TextStyle(color: AppTheme.secondaryTextColor(context)),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                  fillColor: AppTheme.inputFillColor(context),
+                  border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none),
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Theme Color', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              Text('Theme Color',
+                  style: TextStyle(
+                      color: AppTheme.secondaryTextColor(context),
+                      fontSize: 13)),
               const SizedBox(height: 10),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -889,11 +1361,16 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   return GestureDetector(
                     onTap: () => setSheetState(() => selectedColor = c),
                     child: Container(
-                      width: 36, height: 36,
+                      width: 36,
+                      height: 36,
                       decoration: BoxDecoration(
                         color: c,
                         shape: BoxShape.circle,
-                        border: isSel ? Border.all(color: Colors.white, width: 3) : null,
+                        border: isSel
+                            ? Border.all(
+                                color: AppTheme.primaryTextColor(context),
+                                width: 3)
+                            : null,
                       ),
                     ),
                   );
@@ -908,15 +1385,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   final user = FirebaseAuth.instance.currentUser;
                   if (user == null) return;
 
-                  final updated = List<Map<String, dynamic>>.from(currentHighlights);
+                  final updated =
+                      List<Map<String, dynamic>>.from(currentHighlights);
                   updated.add({
                     'label': txt,
-                    'color': '0x${selectedColor.value.toRadixString(16).toUpperCase()}',
+                    'color':
+                        '0x${selectedColor.toARGB32().toRadixString(16).toUpperCase()}',
                   });
 
                   Navigator.pop(ctx);
 
-                  await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(user.uid)
+                      .update({
                     'highlights': updated,
                   });
                 },
@@ -924,9 +1406,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   backgroundColor: const Color(0xFFFF5A1F),
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('Add Highlight', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text('Add Highlight',
+                    style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -947,140 +1431,304 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final bioCtrl = TextEditingController(text: bio);
     final deptCtrl = TextEditingController(text: department);
     final yearCtrl = TextEditingController(text: yearOfStudy);
-    final photoCtrl = TextEditingController(text: photoUrl ?? '');
+    File? selectedPhoto;
+    bool removePhoto = false;
+
+    bool isSaving = false;
 
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (ctx) => Container(
-        margin: const EdgeInsets.all(12),
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, top: 16, left: 20, right: 20),
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(24)),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(child: Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: 16),
-              const Text('Edit Profile', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 16),
-              TextField(
-                controller: nameCtrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Full Name',
-                  labelStyle: const TextStyle(color: Colors.white70),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      builder: (ctx) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => Container(
+          margin: const EdgeInsets.all(12),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.90,
+          ),
+          padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(sheetContext).bottom +
+                  MediaQuery.paddingOf(sheetContext).bottom +
+                  20,
+              top: 16,
+              left: 20,
+              right: 20),
+          decoration: BoxDecoration(
+            color: AppTheme.cardColor(sheetContext),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppTheme.cardBorderColor(sheetContext)),
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                    child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                            color: AppTheme.tertiaryTextColor(sheetContext),
+                            borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 16),
+                Text('Edit Profile',
+                    style: TextStyle(
+                        color: AppTheme.primaryTextColor(sheetContext),
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameCtrl,
+                  style:
+                      TextStyle(color: AppTheme.primaryTextColor(sheetContext)),
+                  decoration: InputDecoration(
+                    labelText: 'Full Name',
+                    labelStyle: TextStyle(
+                        color: AppTheme.secondaryTextColor(sheetContext)),
+                    filled: true,
+                    fillColor: AppTheme.inputFillColor(sheetContext),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: bioCtrl,
-                maxLines: 2,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Bio',
-                  labelStyle: const TextStyle(color: Colors.white70),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: bioCtrl,
+                  maxLines: 2,
+                  style:
+                      TextStyle(color: AppTheme.primaryTextColor(sheetContext)),
+                  decoration: InputDecoration(
+                    labelText: 'Bio',
+                    labelStyle: TextStyle(
+                        color: AppTheme.secondaryTextColor(sheetContext)),
+                    filled: true,
+                    fillColor: AppTheme.inputFillColor(sheetContext),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: deptCtrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Department',
-                  labelStyle: const TextStyle(color: Colors.white70),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: deptCtrl,
+                  style:
+                      TextStyle(color: AppTheme.primaryTextColor(sheetContext)),
+                  decoration: InputDecoration(
+                    labelText: 'Department',
+                    labelStyle: TextStyle(
+                        color: AppTheme.secondaryTextColor(sheetContext)),
+                    filled: true,
+                    fillColor: AppTheme.inputFillColor(sheetContext),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: yearCtrl,
-                keyboardType: TextInputType.number,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Year of Study (1-4)',
-                  labelStyle: const TextStyle(color: Colors.white70),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: yearCtrl,
+                  keyboardType: TextInputType.number,
+                  style:
+                      TextStyle(color: AppTheme.primaryTextColor(sheetContext)),
+                  decoration: InputDecoration(
+                    labelText: 'Year of Study (1-4)',
+                    labelStyle: TextStyle(
+                        color: AppTheme.secondaryTextColor(sheetContext)),
+                    filled: true,
+                    fillColor: AppTheme.inputFillColor(sheetContext),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: photoCtrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Profile Photo URL',
-                  labelStyle: const TextStyle(color: Colors.white70),
-                  filled: true,
-                  fillColor: Colors.white.withOpacity(0.06),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceMutedColor(sheetContext),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                        color: AppTheme.cardBorderColor(sheetContext)),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 30,
+                        backgroundColor: AppTheme.cardColor(sheetContext),
+                        backgroundImage: selectedPhoto != null
+                            ? FileImage(selectedPhoto!)
+                            : (!removePhoto && photoUrl != null
+                                ? NetworkImage(photoUrl)
+                                : null) as ImageProvider<Object>?,
+                        child: selectedPhoto == null &&
+                                (removePhoto || photoUrl == null)
+                            ? Icon(Icons.person_rounded,
+                                color:
+                                    AppTheme.secondaryTextColor(sheetContext))
+                            : null,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Profile photo',
+                              style: TextStyle(
+                                color: AppTheme.primaryTextColor(sheetContext),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Choose a clear photo from your gallery.',
+                              style: TextStyle(
+                                color:
+                                    AppTheme.secondaryTextColor(sheetContext),
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: [
+                                TextButton.icon(
+                                  onPressed: () async {
+                                    final picked =
+                                        await ImagePicker().pickImage(
+                                      source: ImageSource.gallery,
+                                      imageQuality: 88,
+                                      maxWidth: 1200,
+                                    );
+                                    if (picked != null) {
+                                      setSheetState(() {
+                                        selectedPhoto = File(picked.path);
+                                        removePhoto = false;
+                                      });
+                                    }
+                                  },
+                                  icon: const Icon(Icons.photo_library_outlined,
+                                      size: 17),
+                                  label: const Text('Choose photo'),
+                                ),
+                                if (photoUrl != null || selectedPhoto != null)
+                                  TextButton(
+                                    onPressed: () => setSheetState(() {
+                                      selectedPhoto = null;
+                                      removePhoto = true;
+                                    }),
+                                    child: Text(
+                                      'Remove',
+                                      style: TextStyle(
+                                          color: Theme.of(sheetContext)
+                                              .colorScheme
+                                              .error),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () async {
-                  final n = nameCtrl.text.trim();
-                  final b = bioCtrl.text.trim();
-                  final d = deptCtrl.text.trim();
-                  final y = int.tryParse(yearCtrl.text.trim()) ?? 1;
-                  final p = photoCtrl.text.trim();
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          final n = nameCtrl.text.trim();
+                          final b = bioCtrl.text.trim();
+                          final d = deptCtrl.text.trim();
+                          final y = int.tryParse(yearCtrl.text.trim()) ?? 1;
 
-                  if (n.isEmpty) return;
+                          if (n.isEmpty) return;
 
-                  final user = FirebaseAuth.instance.currentUser;
-                  if (user == null) return;
+                          final user = FirebaseAuth.instance.currentUser;
+                          if (user == null) return;
 
-                  Navigator.pop(ctx);
+                          setSheetState(() {
+                            isSaving = true;
+                          });
 
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (_) => const Center(child: CircularProgressIndicator(color: Color(0xFFFF5A1F))),
-                  );
+                          try {
+                            String? nextPhotoUrl =
+                                removePhoto ? null : photoUrl;
+                            if (selectedPhoto != null) {
+                              nextPhotoUrl =
+                                  await CloudinaryService.uploadImage(
+                                      selectedPhoto!);
+                              if (nextPhotoUrl == null) {
+                                throw Exception(
+                                    'Could not upload profile photo');
+                              }
+                            }
 
-                  try {
-                    await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-                      'name': n,
-                      'bio': b,
-                      'department': d,
-                      'yearOfStudy': y,
-                      'photoUrl': p.isNotEmpty ? p : null,
-                    });
-                    
-                    await user.updateDisplayName(n);
-                    if (p.isNotEmpty) {
-                      await user.updatePhotoURL(p);
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update: $e')));
-                    }
-                  } finally {
-                    if (context.mounted) {
-                      Navigator.pop(context);
-                    }
-                  }
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF5A1F),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .set({
+                              'name': n,
+                              'bio': b,
+                              'department': d,
+                              'yearOfStudy': y,
+                              'photoUrl': nextPhotoUrl,
+                            }, SetOptions(merge: true));
+
+                            await user.updateDisplayName(n);
+                            await user.updatePhotoURL(nextPhotoUrl);
+
+                            ref.invalidate(userProfileProvider);
+
+                            if (sheetContext.mounted) {
+                              Navigator.pop(sheetContext);
+                            }
+
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content:
+                                      Text('Profile updated successfully!'),
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            setSheetState(() {
+                              isSaving = false;
+                            });
+                            if (sheetContext.mounted) {
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(
+                                    content: Text(
+                                        "We couldn't update your profile. Please try again.")),
+                              );
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFFF5A1F),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: isSaving
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('Save Changes',
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
-                child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.bold)),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -1097,62 +1745,196 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
   }) {
     showModalBottomSheet(
       context: context,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => Container(
+      builder: (sheetContext) => Container(
         margin: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(sheetContext).height * 0.90,
+        ),
+        decoration: BoxDecoration(
+          color: AppTheme.cardColor(context),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.cardBorderColor(context)),
+        ),
         child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(width: 36, height: 4, margin: const EdgeInsets.symmetric(vertical: 12), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                child: Align(alignment: Alignment.centerLeft, child: Text('Settings', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w700))),
-              ),
-              _SettingsTile(
-                icon: Icons.edit_rounded,
-                label: 'Edit Profile',
-                onTap: () {
-                  Navigator.pop(context);
-                  _showEditProfileSheet(context, name: name, bio: bio, department: department, yearOfStudy: yearOfStudy, photoUrl: photoUrl);
-                },
-              ),
-              _SettingsTile(icon: Icons.notifications_none_rounded, label: 'Notifications', onTap: () => Navigator.pop(context)),
-              _SettingsTile(icon: Icons.lock_outline_rounded, label: 'Privacy', onTap: () => Navigator.pop(context)),
-              Consumer(
-                builder: (ctx, ref, _) {
-                  final userProfile = ref.watch(userProfileProvider).value;
-                  final autoAccept = userProfile?['autoAcceptRequests'] as bool? ?? false;
-                  return SwitchListTile(
-                    secondary: const Icon(Icons.handshake_outlined, color: Colors.white),
-                    title: const Text('Auto-Accept Connection Requests', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-                    subtitle: Text(autoAccept ? 'Automatically accept incoming requests' : 'Manually review incoming requests', style: const TextStyle(color: Colors.white54, fontSize: 12)),
-                    value: autoAccept,
-                    activeColor: const Color(0xFFFF5A1F),
-                    onChanged: (val) async {
-                      final uid = FirebaseAuth.instance.currentUser?.uid;
-                      if (uid != null) {
-                        await FirebaseFirestore.instance.collection('users').doc(uid).update({'autoAcceptRequests': val});
-                      }
-                    },
-                  );
-                },
-              ),
-              _SettingsTile(icon: Icons.help_outline_rounded, label: 'Help & Support', onTap: () => Navigator.pop(context)),
-              const Divider(color: Color(0xFF2C2C2E), height: 1),
-              _SettingsTile(
-                icon: Icons.logout_rounded,
-                label: 'Log Out',
-                color: Colors.redAccent,
-                onTap: () {
-                  Navigator.pop(context);
-                  ref.read(authControllerProvider.notifier).logout();
-                },
-              ),
-              const SizedBox(height: 8),
-            ],
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                        color: AppTheme.secondaryTextColor(context)
+                            .withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(2))),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                  child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text('Settings',
+                          style: TextStyle(
+                              color: AppTheme.primaryTextColor(context),
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700))),
+                ),
+                _SettingsTile(
+                  icon: Icons.edit_rounded,
+                  label: 'Edit Profile',
+                  onTap: () {
+                    Navigator.of(context, rootNavigator: true).pop();
+                    _showEditProfileSheet(context,
+                        name: name,
+                        bio: bio,
+                        department: department,
+                        yearOfStudy: yearOfStudy,
+                        photoUrl: photoUrl);
+                  },
+                ),
+
+                // ── APPEARANCE / THEME SELECTOR ─────────────────────────────
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Appearance',
+                        style: TextStyle(
+                            color: AppTheme.primaryOrange,
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ),
+                Consumer(
+                  builder: (ctx, ref, _) {
+                    final themeMode = ref.watch(themeModeProvider);
+                    final primaryText = AppTheme.primaryTextColor(ctx);
+                    final secondaryText = AppTheme.secondaryTextColor(ctx);
+                    return RadioGroup<ThemeMode>(
+                      groupValue: themeMode,
+                      onChanged: (value) {
+                        if (value != null) {
+                          ref
+                              .read(themeModeProvider.notifier)
+                              .setThemeMode(value);
+                        }
+                      },
+                      child: Column(
+                        children: [
+                          RadioListTile<ThemeMode>(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: Text('Dark Mode (Default)',
+                                style: TextStyle(
+                                    color: primaryText,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14)),
+                            subtitle: Text('Signature dark campus aesthetic',
+                                style: TextStyle(
+                                    color: secondaryText, fontSize: 12)),
+                            value: ThemeMode.dark,
+                            activeColor: AppTheme.primaryOrange,
+                          ),
+                          RadioListTile<ThemeMode>(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: Text('Light Mode',
+                                style: TextStyle(
+                                    color: primaryText,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14)),
+                            subtitle: Text('Clean, high-contrast warm surface',
+                                style: TextStyle(
+                                    color: secondaryText, fontSize: 12)),
+                            value: ThemeMode.light,
+                            activeColor: AppTheme.primaryOrange,
+                          ),
+                          RadioListTile<ThemeMode>(
+                            contentPadding:
+                                const EdgeInsets.symmetric(horizontal: 16),
+                            title: Text('System Default',
+                                style: TextStyle(
+                                    color: primaryText,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14)),
+                            subtitle: Text('Follow Android device system theme',
+                                style: TextStyle(
+                                    color: secondaryText, fontSize: 12)),
+                            value: ThemeMode.system,
+                            activeColor: AppTheme.primaryOrange,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                Divider(color: AppTheme.cardBorderColor(context), height: 1),
+
+                _SettingsTile(
+                    icon: Icons.notifications_none_rounded,
+                    label: 'Notifications',
+                    onTap: () =>
+                        Navigator.of(context, rootNavigator: true).pop()),
+                _SettingsTile(
+                    icon: Icons.lock_outline_rounded,
+                    label: 'Privacy',
+                    onTap: () =>
+                        Navigator.of(context, rootNavigator: true).pop()),
+                Consumer(
+                  builder: (ctx, ref, _) {
+                    final userProfile = ref.watch(userProfileProvider).value;
+                    final autoAccept =
+                        userProfile?['autoAcceptRequests'] as bool? ?? false;
+                    return SwitchListTile(
+                      secondary: Icon(Icons.handshake_outlined,
+                          color: AppTheme.primaryTextColor(ctx)),
+                      title: Text('Auto-Accept Connection Requests',
+                          style: TextStyle(
+                              color: AppTheme.primaryTextColor(ctx),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold)),
+                      subtitle: Text(
+                          autoAccept
+                              ? 'Automatically accept incoming requests'
+                              : 'Manually review incoming requests',
+                          style: TextStyle(
+                              color: AppTheme.secondaryTextColor(ctx),
+                              fontSize: 12)),
+                      value: autoAccept,
+                      activeThumbColor: AppTheme.primaryOrange,
+                      onChanged: (val) async {
+                        final uid = FirebaseAuth.instance.currentUser?.uid;
+                        if (uid != null) {
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(uid)
+                              .update({'autoAcceptRequests': val});
+                        }
+                      },
+                    );
+                  },
+                ),
+                _SettingsTile(
+                    icon: Icons.help_outline_rounded,
+                    label: 'Help & Support',
+                    onTap: () =>
+                        Navigator.of(context, rootNavigator: true).pop()),
+                Divider(color: AppTheme.cardBorderColor(context), height: 1),
+                _SettingsTile(
+                  icon: Icons.logout_rounded,
+                  label: 'Log Out',
+                  color: Colors.redAccent,
+                  onTap: () {
+                    Navigator.of(context, rootNavigator: true).pop();
+                    ref.read(authControllerProvider.notifier).logout();
+                  },
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
           ),
         ),
       ),
@@ -1174,9 +1956,25 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   double get maxExtent => 46;
 
   @override
-  Widget build(BuildContext context, double shrinkOffset, bool overlapsContent) {
+  Widget build(
+      BuildContext context, double shrinkOffset, bool overlapsContent) {
     return Container(
-      color: Colors.black,
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceElevatedColor(context),
+        border: Border(
+          bottom: BorderSide(color: AppTheme.cardBorderColor(context)),
+        ),
+        boxShadow: overlapsContent
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(
+                      alpha: AppTheme.isDark(context) ? 0.24 : 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
+      ),
       child: Row(
         children: isStudent
             ? [
@@ -1236,9 +2034,7 @@ class _TabBarDelegate extends SliverPersistentHeaderDelegate {
   }
 
   @override
-  bool shouldRebuild(_TabBarDelegate oldDelegate) =>
-      oldDelegate.tabController != tabController ||
-      oldDelegate.isStudent != isStudent;
+  bool shouldRebuild(_TabBarDelegate oldDelegate) => true;
 }
 
 class _TabItem extends StatelessWidget {
@@ -1267,12 +2063,20 @@ class _TabItem extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(icon, color: isActive ? Colors.white : Colors.white38, size: 20),
+                Icon(
+                  icon,
+                  color: isActive
+                      ? AppTheme.primaryTextColor(context)
+                      : AppTheme.secondaryTextColor(context),
+                  size: 20,
+                ),
                 const SizedBox(width: 6),
                 Text(
                   label,
                   style: TextStyle(
-                    color: isActive ? Colors.white : Colors.white38,
+                    color: isActive
+                        ? AppTheme.primaryTextColor(context)
+                        : AppTheme.secondaryTextColor(context),
                     fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
                     fontSize: 13,
                   ),
@@ -1281,10 +2085,14 @@ class _TabItem extends StatelessWidget {
             ),
             const SizedBox(height: 4),
             AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              height: 2,
-              width: isActive ? 40 : 0,
-              decoration: BoxDecoration(color: const Color(0xFFFF5A1F), borderRadius: BorderRadius.circular(1)),
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              height: 3,
+              width: isActive ? 28 : 0,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryOrange,
+                borderRadius: BorderRadius.circular(1.5),
+              ),
             ),
           ],
         ),
@@ -1311,12 +2119,18 @@ class _StatBox extends StatelessWidget {
       children: [
         Text(
           _fmt(count),
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800),
+          style: TextStyle(
+              color: AppTheme.primaryTextColor(context),
+              fontSize: 18,
+              fontWeight: FontWeight.w800),
         ),
         const SizedBox(height: 2),
         Text(
           label,
-          style: const TextStyle(color: Color(0xFF888888), fontSize: 12, fontWeight: FontWeight.w400),
+          style: TextStyle(
+              color: AppTheme.secondaryTextColor(context),
+              fontSize: 12,
+              fontWeight: FontWeight.w400),
         ),
       ],
     );
@@ -1328,25 +2142,28 @@ class _ProfileActionBtn extends StatelessWidget {
   final VoidCallback onTap;
   final bool filled;
 
-  const _ProfileActionBtn({required this.label, required this.onTap, this.filled = false});
+  const _ProfileActionBtn(
+      {required this.label, required this.onTap, this.filled = false});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        height: 36,
+        height: 40,
         decoration: BoxDecoration(
-          color: filled ? const Color(0xFFFF5A1F) : const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(10),
-          border: filled ? null : Border.all(color: const Color(0xFF333333)),
+          color: filled ? AppTheme.primaryOrange : AppTheme.cardColor(context),
+          borderRadius: BorderRadius.circular(12),
+          border: filled
+              ? null
+              : Border.all(color: AppTheme.cardBorderColor(context)),
         ),
         alignment: Alignment.center,
         child: Text(
           label,
           style: TextStyle(
-            color: Colors.white,
-            fontSize: 13.5,
+            color: filled ? Colors.white : AppTheme.primaryTextColor(context),
+            fontSize: 14,
             fontWeight: filled ? FontWeight.bold : FontWeight.w600,
           ),
         ),
@@ -1359,15 +2176,24 @@ class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final Color color;
+  final Color? color;
 
-  const _SettingsTile({required this.icon, required this.label, required this.onTap, this.color = Colors.white});
+  const _SettingsTile(
+      {required this.icon,
+      required this.label,
+      required this.onTap,
+      this.color});
 
   @override
   Widget build(BuildContext context) {
+    final effectiveColor = color ?? AppTheme.primaryTextColor(context);
     return ListTile(
-      leading: Icon(icon, color: color),
-      title: Text(label, style: TextStyle(color: color, fontSize: 15, fontWeight: FontWeight.w500)),
+      leading: Icon(icon, color: effectiveColor),
+      title: Text(label,
+          style: TextStyle(
+              color: effectiveColor,
+              fontSize: 15,
+              fontWeight: FontWeight.w500)),
       onTap: onTap,
     );
   }

@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import '../utils/shared_content_formatter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/chat_models.dart';
 
@@ -15,6 +16,32 @@ class ChatRepository {
 
   User? get _currentUser => _auth.currentUser;
 
+  Future<Map<String, dynamic>?> getConversationPartner(
+      String conversationId) async {
+    final user = _currentUser;
+    if (user == null) return null;
+    final snapshot = await _firestore
+        .collection('conversations')
+        .doc(conversationId)
+        .get()
+        .timeout(const Duration(seconds: 10));
+    if (!snapshot.exists) return null;
+    final data = snapshot.data()!;
+    final participants = List<String>.from(data['participants'] ?? const []);
+    final partnerId = participants.where((id) => id != user.uid).firstOrNull;
+    if (partnerId == null) return null;
+    final details =
+        Map<String, dynamic>.from(data['participantDetails'] ?? const {});
+    final partnerDetails = details[partnerId] is Map
+        ? Map<String, dynamic>.from(details[partnerId] as Map)
+        : const <String, dynamic>{};
+    return {
+      'uid': partnerId,
+      'name': partnerDetails['name'] as String? ?? 'Student',
+      'photoUrl': partnerDetails['photoUrl'] as String?,
+    };
+  }
+
   // Helper to generate deterministic ID for pairs
   static String getPairId(String uid1, String uid2) {
     return uid1.compareTo(uid2) < 0 ? '${uid1}_$uid2' : '${uid2}_$uid1';
@@ -27,46 +54,40 @@ class ChatRepository {
 
     final cleanCode = rawCode.trim().toUpperCase();
     if (cleanCode.isEmpty) throw Exception('Please enter a connection code');
-
-    // Query user by connectionCode
-    final userQuery = await _firestore
-        .collection('users')
-        .where('connectionCode', isEqualTo: cleanCode)
-        .limit(1)
-        .get();
+    if (!RegExp(r'^[A-Z0-9-]{7,24}$').hasMatch(cleanCode)) {
+      throw Exception('That connection code is not valid.');
+    }
 
     DocumentSnapshot<Map<String, dynamic>> targetDoc;
-    if (userQuery.docs.isNotEmpty) {
-      targetDoc = userQuery.docs.first;
-    } else {
-      // Smart Fallback: match by name or email prefix if target student doc lacks connectionCode
-      final prefix = cleanCode.split('-').first.trim().toUpperCase();
-      final allUsers = await _firestore.collection('users').get();
-      final matches = allUsers.docs.where((doc) {
-        if (doc.id == user.uid) return false;
-        final d = doc.data();
-        final name = (d['name'] as String? ?? '').trim().toUpperCase();
-        final email = (d['email'] as String? ?? '').trim().toUpperCase();
-        return (prefix.length >= 3 && (name.startsWith(prefix) || email.startsWith(prefix)));
-      }).toList();
-
-      if (matches.isEmpty) {
-        throw Exception('Student code "$cleanCode" not found. Please verify the code and try again.');
+    final mapping =
+        await _firestore.collection('connectionCodes').doc(cleanCode).get();
+    final mappedUid = mapping.data()?['uid']?.toString() ?? '';
+    if (mappedUid.isNotEmpty) {
+      targetDoc = await _firestore.collection('users').doc(mappedUid).get();
+      if (!targetDoc.exists) {
+        throw Exception('That student profile is not available.');
       }
-      targetDoc = matches.first;
-      // Auto-populate target doc with this connection code if permitted
-      try {
-        await _firestore.collection('users').doc(targetDoc.id).set(
-          {'connectionCode': cleanCode},
-          SetOptions(merge: true),
-        );
-      } catch (_) {}
+    } else {
+      // Backward-compatible lookup for profiles created before the reservation
+      // collection existed. Self-healing profiles populate the mapping later.
+      final legacyQuery = await _firestore
+          .collection('users')
+          .where('connectionCode', isEqualTo: cleanCode)
+          .limit(1)
+          .get();
+      if (legacyQuery.docs.isEmpty) {
+        throw Exception(
+            'Student code "$cleanCode" not found. Please verify the code and try again.');
+      }
+      targetDoc = legacyQuery.docs.first;
     }
     final targetUid = targetDoc.id;
     final targetData = targetDoc.data();
     final targetName = targetData?['name'] as String? ?? 'Student';
-    final targetAutoAccept = targetData?['autoAcceptRequests'] as bool? ?? false;
-    final targetBlocked = List<String>.from(targetData?['blockedUserIds'] ?? []);
+    final targetAutoAccept =
+        targetData?['autoAcceptRequests'] as bool? ?? false;
+    final targetBlocked =
+        List<String>.from(targetData?['blockedUserIds'] ?? []);
 
     if (targetUid == user.uid) {
       throw Exception('You cannot connect with yourself.');
@@ -85,27 +106,30 @@ class ChatRepository {
 
     // Check existing connection
     final pairId = getPairId(user.uid, targetUid);
-    final connDoc = await _firestore.collection('connections').doc(pairId).get();
+    final connDoc =
+        await _firestore.collection('connections').doc(pairId).get();
     if (connDoc.exists) {
       throw Exception('You are already connected with $targetName.');
     }
 
     // Check pending request
     final reqDocId = '${user.uid}_$targetUid';
-    final reqDoc = await _firestore.collection('connection_requests').doc(reqDocId).get();
+    final reqDoc =
+        await _firestore.collection('connection_requests').doc(reqDocId).get();
     if (reqDoc.exists && reqDoc.data()?['status'] == 'pending') {
-      throw Exception('You have already sent a connection request to $targetName.');
+      throw Exception(
+          'You have already sent a connection request to $targetName.');
     }
 
     // Get current user details for the request
-    final myName = myDoc.data()?['name'] as String? ?? user.displayName ?? 'Student';
+    final myName =
+        myDoc.data()?['name'] as String? ?? user.displayName ?? 'Student';
     final myPhoto = myDoc.data()?['photoUrl'] as String? ?? user.photoURL;
     final myDept = myDoc.data()?['department'] as String? ?? 'CS';
     final myYear = myDoc.data()?['yearOfStudy']?.toString() ?? '1';
 
     if (targetAutoAccept) {
-      // Auto-accept request
-      await _firestore.collection('connection_requests').doc(reqDocId).set({
+      final acceptedRequest = {
         'senderId': user.uid,
         'receiverId': targetUid,
         'senderName': myName,
@@ -114,7 +138,7 @@ class ChatRepository {
         'senderYear': myYear,
         'status': 'accepted',
         'createdAt': FieldValue.serverTimestamp(),
-      });
+      };
 
       await _createConnectionAndConversation(
         userA: user.uid,
@@ -123,6 +147,9 @@ class ChatRepository {
         userAPhoto: myPhoto,
         userBName: targetName,
         userBPhoto: targetData?['photoUrl'] as String?,
+        acceptedRequestRef:
+            _firestore.collection('connection_requests').doc(reqDocId),
+        acceptedRequestData: acceptedRequest,
       );
 
       return 'Connected automatically with $targetName!';
@@ -148,22 +175,53 @@ class ChatRepository {
     final user = _currentUser;
     if (user == null) throw Exception('Not authenticated');
 
-    await _firestore.collection('connection_requests').doc(request.id).update({
-      'status': 'accepted',
-    });
+    final requestRef =
+        _firestore.collection('connection_requests').doc(request.id);
+    final myRef = _firestore.collection('users').doc(user.uid);
+    final pairId = getPairId(request.senderId, user.uid);
+    final connectionRef = _firestore.collection('connections').doc(pairId);
+    final conversationRef = _firestore.collection('conversations').doc(pairId);
 
-    final myDoc = await _firestore.collection('users').doc(user.uid).get();
-    final myName = myDoc.data()?['name'] as String? ?? user.displayName ?? 'Student';
-    final myPhoto = myDoc.data()?['photoUrl'] as String? ?? user.photoURL;
+    await _firestore.runTransaction((transaction) async {
+      final requestSnapshot = await transaction.get(requestRef);
+      final mySnapshot = await transaction.get(myRef);
+      final connectionSnapshot = await transaction.get(connectionRef);
+      if (!requestSnapshot.exists ||
+          requestSnapshot.data()?['status'] != 'pending') {
+        return;
+      }
+      if (requestSnapshot.data()?['receiverId'] != user.uid ||
+          requestSnapshot.data()?['senderId'] != request.senderId) {
+        throw Exception('This connection request is no longer valid.');
+      }
 
-    await _createConnectionAndConversation(
-      userA: request.senderId,
-      userB: user.uid,
-      userAName: request.senderName,
-      userAPhoto: request.senderPhotoUrl,
-      userBName: myName,
-      userBPhoto: myPhoto,
-    );
+      final myData = mySnapshot.data();
+      final myName =
+          myData?['name'] as String? ?? user.displayName ?? 'Student';
+      final myPhoto = myData?['photoUrl'] as String? ?? user.photoURL;
+      transaction.update(requestRef, {'status': 'accepted'});
+      if (connectionSnapshot.exists) return;
+
+      transaction.set(connectionRef, {
+        'users': [request.senderId, user.uid],
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      transaction.set(conversationRef, {
+        'participants': [request.senderId, user.uid],
+        'participantDetails': {
+          request.senderId: {
+            'name': request.senderName,
+            'photoUrl': request.senderPhotoUrl,
+          },
+          user.uid: {'name': myName, 'photoUrl': myPhoto},
+        },
+        'lastMessage': 'Connection accepted. Start chatting!',
+        'lastMessageSenderId': '',
+        'lastMessageTimestamp': FieldValue.serverTimestamp(),
+        'unreadCounts': {request.senderId: 0, user.uid: 0},
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+    }).timeout(const Duration(seconds: 10));
   }
 
   // Helper to create connection & conversation
@@ -174,10 +232,16 @@ class ChatRepository {
     required String? userAPhoto,
     required String userBName,
     required String? userBPhoto,
+    DocumentReference<Map<String, dynamic>>? acceptedRequestRef,
+    Map<String, dynamic>? acceptedRequestData,
   }) async {
     final pairId = getPairId(userA, userB);
 
     final batch = _firestore.batch();
+
+    if (acceptedRequestRef != null && acceptedRequestData != null) {
+      batch.set(acceptedRequestRef, acceptedRequestData);
+    }
 
     final connRef = _firestore.collection('connections').doc(pairId);
     batch.set(connRef, {
@@ -210,7 +274,8 @@ class ChatRepository {
   }
 
   // 4. Send Message
-  Future<void> sendMessage(String conversationId, String receiverId, String content) async {
+  Future<void> sendMessage(
+      String conversationId, String receiverId, String content) async {
     final user = _currentUser;
     if (user == null) throw Exception('Not authenticated');
 
@@ -235,7 +300,7 @@ class ChatRepository {
 
     final convRef = _firestore.collection('conversations').doc(conversationId);
     batch.update(convRef, {
-      'lastMessage': cleanText,
+      'lastMessage': sharedContentPreview(cleanText),
       'lastMessageSenderId': user.uid,
       'lastMessageTimestamp': FieldValue.serverTimestamp(),
       'unreadCounts.$receiverId': FieldValue.increment(1),

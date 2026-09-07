@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/notification_model.dart';
 import '../domain/notification_repository.dart';
 
-final notificationRepositoryProvider = Provider<NotificationRepository>((ref) => FirebaseNotificationRepository(
-  FirebaseFirestore.instance,
-  FirebaseAuth.instance,
-));
+final notificationRepositoryProvider =
+    Provider<NotificationRepository>((ref) => FirebaseNotificationRepository(
+          FirebaseFirestore.instance,
+          FirebaseAuth.instance,
+        ));
 
 class FirebaseNotificationRepository implements NotificationRepository {
   final FirebaseFirestore _firestore;
@@ -24,18 +25,26 @@ class FirebaseNotificationRepository implements NotificationRepository {
         .collection('notifications')
         .where('userId', isEqualTo: userId)
         .orderBy('createdAt', descending: true)
+        .limit(50)
         .snapshots()
         .map((snapshot) {
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        data['id'] = doc.id;
-        if (data['createdAt'] is Timestamp) {
-          data['createdAt'] = (data['createdAt'] as Timestamp).toDate().toIso8601String();
-        } else if (data['createdAt'] == null) {
-          data['createdAt'] = DateTime.now().toIso8601String();
+      final notifications = <NotificationModel>[];
+      for (final doc in snapshot.docs) {
+        try {
+          final data = Map<String, dynamic>.from(doc.data());
+          data['id'] = doc.id;
+          if (data['createdAt'] is Timestamp) {
+            data['createdAt'] =
+                (data['createdAt'] as Timestamp).toDate().toIso8601String();
+          }
+          notifications.add(NotificationModel.fromJson(data));
+        } on FormatException {
+          // One malformed legacy record must not make the inbox unusable.
+        } on TypeError {
+          // Invalid server data is isolated; diagnostics remain provider-side.
         }
-        return NotificationModel.fromJson(data);
-      }).toList();
+      }
+      return notifications;
     });
   }
 
