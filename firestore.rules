@@ -121,6 +121,15 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSignedIn();
       allow write: if isMainAdmin() || request.auth.uid == userId;
+
+      match /fcmTokens/{tokenId} {
+        allow read, delete: if isSignedIn() && request.auth.uid == userId;
+        allow create, update: if isSignedIn() && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['token', 'uid', 'platform', 'updatedAt'])
+          && request.resource.data.token == tokenId
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.platform is string;
+      }
     }
 
     // COMMENTS & INTERACTION

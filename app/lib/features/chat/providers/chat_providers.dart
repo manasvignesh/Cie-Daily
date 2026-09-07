@@ -48,21 +48,23 @@ final conversationsProvider =
         .where('participants', arrayContains: user.uid)
         .limit(100)
         .snapshots()) {
-      developer.log('documents=${snapshot.docs.length}', name: 'cie.chat.inbox');
-    final list = <ConversationModel>[];
-    for (final doc in snapshot.docs) {
-      try {
-        list.add(ConversationModel.fromMap(doc.data(), doc.id));
-      } on Object catch (error, stackTrace) {
-        developer.log(
-          'parse_failed document=${doc.id} errorType=${error.runtimeType} error=$error',
-          name: 'cie.chat.inbox',
-          error: error,
-          stackTrace: stackTrace,
-        );
+      developer.log('documents=${snapshot.docs.length}',
+          name: 'cie.chat.inbox');
+      final list = <ConversationModel>[];
+      for (final doc in snapshot.docs) {
+        try {
+          list.add(ConversationModel.fromMap(doc.data(), doc.id));
+        } on Object catch (error, stackTrace) {
+          developer.log(
+            'parse_failed document=${doc.id} errorType=${error.runtimeType} error=$error',
+            name: 'cie.chat.inbox',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        }
       }
-    }
-      list.sort((a, b) => b.lastMessageTimestamp.compareTo(a.lastMessageTimestamp));
+      list.sort(
+          (a, b) => b.lastMessageTimestamp.compareTo(a.lastMessageTimestamp));
       yield list;
     }
   } on FirebaseException catch (error, stackTrace) {
@@ -120,7 +122,8 @@ class ChatMessagesController
       final nextLatestIds = <String>{};
       for (final doc in snapshot.docs) {
         try {
-          _messages[doc.id] = ChatMessageModel.fromMap(doc.data(), doc.id);
+          final confirmed = ChatMessageModel.fromMap(doc.data(), doc.id);
+          reconcileConfirmedChatMessage(_messages, confirmed);
           nextLatestIds.add(doc.id);
         } on Object {
           // Isolate malformed legacy messages instead of breaking the thread.
@@ -135,6 +138,61 @@ class ChatMessagesController
     }, onError: (Object error, StackTrace stackTrace) {
       state = AsyncError(error, stackTrace);
     });
+  }
+
+  void addOptimistic({
+    required String clientMessageId,
+    required String senderId,
+    required String receiverId,
+    required String content,
+  }) {
+    final id = optimisticMessageId(clientMessageId);
+    _messages[id] = ChatMessageModel(
+      id: id,
+      senderId: senderId,
+      receiverId: receiverId,
+      content: content,
+      timestamp: DateTime.now(),
+      isRead: false,
+      clientMessageId: clientMessageId,
+      delivery: ChatMessageDelivery.sending,
+    );
+    _emit();
+  }
+
+  void markFailed(String clientMessageId) {
+    final id = optimisticMessageId(clientMessageId);
+    final current = _messages[id];
+    if (current == null) return;
+    _messages[id] = current.copyWith(delivery: ChatMessageDelivery.failed);
+    _emit();
+  }
+
+  void markAccepted(String clientMessageId, {String? messageId}) {
+    final id = optimisticMessageId(clientMessageId);
+    final current = _messages[id];
+    if (current == null) return;
+    // Keep the optimistic bubble visible until the realtime document arrives.
+    _messages[id] = current.copyWith(delivery: ChatMessageDelivery.sent);
+    _emit();
+  }
+
+  void retry(String clientMessageId) {
+    final id = optimisticMessageId(clientMessageId);
+    final current = _messages[id];
+    if (current == null) return;
+    _messages[id] = current.copyWith(delivery: ChatMessageDelivery.sending);
+    _emit();
+  }
+
+  void _emit() {
+    final current = state.valueOrNull;
+    state = AsyncData(ChatHistoryState(
+      messages: _sortedMessages(),
+      hasMore: current?.hasMore ?? false,
+      isLoadingOlder: current?.isLoadingOlder ?? false,
+      olderLoadFailed: current?.olderLoadFailed ?? false,
+    ));
   }
 
   Future<void> loadOlder() async {

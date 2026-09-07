@@ -7,6 +7,8 @@ import '../../../core/theme/app_theme.dart';
 import '../../feed/data/firebase_feed_repository.dart';
 import '../../feed/models/post_model.dart';
 import '../models/structured_article_model.dart';
+import '../services/article_narration_service.dart';
+import 'narration_controls.dart';
 
 class QuickBriefSheet extends ConsumerStatefulWidget {
   final List<PostModel> featuredPosts;
@@ -91,6 +93,7 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
 
   @override
   void dispose() {
+    ref.read(articleNarrationProvider.notifier).stop();
     _pageController.dispose();
     super.dispose();
   }
@@ -311,6 +314,7 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
               itemCount: _pages.length,
               onPageChanged: (index) {
                 HapticFeedback.lightImpact();
+                ref.read(articleNarrationProvider.notifier).stop();
                 setState(() => _currentIndex = index);
               },
               itemBuilder: (context, index) {
@@ -379,12 +383,12 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Row(
+                              Row(
                                 children: [
-                                  Icon(Icons.bolt_rounded,
+                                  const Icon(Icons.bolt_rounded,
                                       color: AppTheme.primaryOrange, size: 18),
-                                  SizedBox(width: 6),
-                                  Text(
+                                  const SizedBox(width: 6),
+                                  const Text(
                                     'IN 20 SECONDS',
                                     style: TextStyle(
                                       color: AppTheme.primaryOrange,
@@ -394,8 +398,23 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
                                       fontFamily: 'Inter',
                                     ),
                                   ),
+                                  const Spacer(),
+                                  NarrationButton(
+                                    articleId: post.id,
+                                    label: 'LISTEN',
+                                    compact: true,
+                                    onPlay: () => ref
+                                        .read(articleNarrationProvider.notifier)
+                                        .playBrief(
+                                          articleId: post.id,
+                                          headline: headline,
+                                          summary: normalizedSummary,
+                                          facts: normalizedFacts,
+                                        ),
+                                  ),
                                 ],
                               ),
+                              const CompactNarrationPlayer(),
                               const SizedBox(height: 10),
                               Text(
                                 normalizedSummary,

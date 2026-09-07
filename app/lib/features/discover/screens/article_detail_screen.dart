@@ -11,6 +11,7 @@ import '../../feed/widgets/in_app_share_bottom_sheet.dart';
 import '../../user/data/firebase_user_repository.dart';
 import '../models/structured_article_model.dart';
 import '../providers/discover_provider.dart';
+import '../services/article_narration_service.dart';
 import '../widgets/article_components.dart';
 
 class ArticleDetailScreen extends ConsumerStatefulWidget {
@@ -39,6 +40,12 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
     if (widget.initialArticle != null) {
       _isSaved = widget.initialArticle!.isBookmarkedByCurrentUser;
     }
+  }
+
+  @override
+  void dispose() {
+    ref.read(articleNarrationProvider.notifier).stop();
+    super.dispose();
   }
 
   Future<void> _toggleSaved(PostModel article) async {

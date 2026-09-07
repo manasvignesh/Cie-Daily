@@ -8,6 +8,10 @@ const invalidTokenCodes = new Set([
   "messaging/registration-token-not-registered",
 ]);
 
+function tokenSuffix(token: string): string {
+  return token.length > 6 ? token.slice(-6) : "short";
+}
+
 export function cleanText(value: unknown, fallback: string, max: number): string {
   const text = typeof value === "string" ? value.trim() : "";
   if (!text) return fallback;
@@ -69,7 +73,18 @@ export async function deliverToUser(input: Delivery): Promise<{ sent: number; du
   if (!claimed) return { sent: 0, duplicate: true };
 
   const tokens = await db.collection("users").doc(input.uid).collection("fcmTokens").get();
-  const docs = tokens.docs.filter((doc) => typeof doc.data().token === "string" && doc.data().token.length > 0);
+  const docs = tokens.docs.filter((doc) => {
+    const data = doc.data();
+    // The owning uid is established by the parent Firestore path. Keep legacy
+    // token records (created before the uid field was added) deliverable.
+    return typeof data.token === "string" && data.token.length > 0;
+  });
+  console.log("FCM recipient tokens resolved", {
+    uid: input.uid,
+    tokenDocumentCount: tokens.size,
+    eligibleTokenCount: docs.length,
+    tokenSuffixes: docs.map((doc) => tokenSuffix(doc.data().token)),
+  });
   if (!docs.length) {
     await ref.set({ pushStatus: "no_devices", pushUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });
     return { sent: 0, duplicate: false };
@@ -115,6 +130,12 @@ export async function deliverToUser(input: Delivery): Promise<{ sent: number; du
       pushRetryable: sent === 0,
       pushUpdatedAt: FieldValue.serverTimestamp(),
     }, { merge: true });
+    console.log("FCM delivery completed", {
+      uid: input.uid,
+      tokenDocumentCount: docs.length,
+      successCount: sent,
+      failureCount: Math.max(0, docs.length - sent),
+    });
     return { sent, duplicate: false };
   } catch (error) {
     await ref.set({ pushStatus: "failed", pushRetryable: true, pushUpdatedAt: FieldValue.serverTimestamp() }, { merge: true });

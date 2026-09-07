@@ -6,6 +6,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:developer' as developer;
 
 typedef NotificationRouteCallback = void Function(String route);
 
@@ -131,8 +132,11 @@ class NotificationService {
     _syncInFlight = operation;
     try {
       await operation;
-    } catch (_) {
-      // Push registration is non-critical and is retried on a later app build.
+    } catch (error) {
+      developer.log(
+        'token_sync_failed uid=${_auth.currentUser?.uid ?? 'none'} code=${error is FirebaseException ? error.code : error.runtimeType}',
+        name: 'cie.notifications',
+      );
     } finally {
       _syncInFlight = null;
     }
@@ -154,7 +158,12 @@ class NotificationService {
     }
 
     final token = await _messaging.getToken();
-    if (token != null && token.isNotEmpty) await _persistToken(token);
+    if (token != null && token.isNotEmpty) {
+      await _persistToken(token);
+    } else {
+      developer.log('token_unavailable uid=${user.uid}',
+          name: 'cie.notifications');
+    }
   }
 
   Future<void> clearForLogout() async {
@@ -190,12 +199,17 @@ class NotificationService {
     final previousToken = _registeredToken;
     await _tokenDocument(user.uid, token).set({
       'token': token,
+      'uid': user.uid,
       'platform': kIsWeb ? 'web' : defaultTargetPlatform.name,
       'updatedAt': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true)).timeout(const Duration(seconds: 8));
 
     _registeredUserId = user.uid;
     _registeredToken = token;
+    developer.log(
+      'token_registered uid=${user.uid} suffix=${_safeTokenSuffix(token)}',
+      name: 'cie.notifications',
+    );
     if (previousUid != null &&
         previousToken != null &&
         (previousUid != user.uid || previousToken != token)) {
@@ -205,6 +219,11 @@ class NotificationService {
         // The new token is already registered; stale-token pruning remains safe.
       }
     }
+  }
+
+  String _safeTokenSuffix(String token) {
+    if (token.length <= 6) return 'short';
+    return token.substring(token.length - 6);
   }
 
   DocumentReference<Map<String, dynamic>> _tokenDocument(

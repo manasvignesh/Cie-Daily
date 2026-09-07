@@ -212,6 +212,7 @@ test('FCM token documents are private and owner-bound', async () => {
   const tokenPath = `users/alice/fcmTokens/${token}`;
   await assertSucceeds(setDoc(doc(alice, tokenPath), {
     token,
+    uid: 'alice',
     platform: 'android',
     updatedAt: serverTimestamp(),
   }));
@@ -219,11 +220,13 @@ test('FCM token documents are private and owner-bound', async () => {
   await assertFails(getDoc(doc(bob, tokenPath)));
   await assertFails(setDoc(doc(alice, 'users/alice/fcmTokens/wrong-id'), {
     token,
+    uid: 'alice',
     platform: 'android',
     updatedAt: serverTimestamp(),
   }));
   await assertFails(setDoc(doc(bob, `users/alice/fcmTokens/${token}`), {
     token,
+    uid: 'bob',
     platform: 'android',
     updatedAt: serverTimestamp(),
   }));

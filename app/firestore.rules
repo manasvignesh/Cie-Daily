@@ -180,8 +180,9 @@ service cloud.firestore {
       match /fcmTokens/{tokenId} {
         allow read: if isSignedIn() && request.auth.uid == userId;
         allow create, update: if isSignedIn() && request.auth.uid == userId
-          && request.resource.data.keys().hasOnly(['token', 'platform', 'updatedAt'])
+          && request.resource.data.keys().hasOnly(['token', 'uid', 'platform', 'updatedAt'])
           && request.resource.data.token == tokenId
+          && request.resource.data.uid == request.auth.uid
           && request.resource.data.platform is string;
         allow delete: if isSignedIn() && request.auth.uid == userId;
       }

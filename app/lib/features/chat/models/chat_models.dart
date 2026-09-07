@@ -77,7 +77,8 @@ class ConversationModel {
   });
 
   factory ConversationModel.fromMap(Map<String, dynamic> map, String docId) {
-    final ts = map['lastMessageTimestamp'] ?? map['updatedAt'] ?? map['createdAt'];
+    final ts =
+        map['lastMessageTimestamp'] ?? map['updatedAt'] ?? map['createdAt'];
     DateTime dt = DateTime.fromMillisecondsSinceEpoch(0);
     if (ts is Timestamp) {
       dt = ts.toDate();
@@ -90,7 +91,10 @@ class ConversationModel {
     if (rawParticipants is! Iterable) {
       throw const FormatException('Conversation participants are missing');
     }
-    final participants = rawParticipants.whereType<String>().where((id) => id.isNotEmpty).toList();
+    final participants = rawParticipants
+        .whereType<String>()
+        .where((id) => id.isNotEmpty)
+        .toList();
     if (participants.isEmpty) {
       throw const FormatException('Conversation has no valid participants');
     }
@@ -119,6 +123,8 @@ class ChatMessageModel {
   final String content;
   final DateTime timestamp;
   final bool isRead;
+  final String? clientMessageId;
+  final ChatMessageDelivery delivery;
 
   const ChatMessageModel({
     required this.id,
@@ -127,6 +133,8 @@ class ChatMessageModel {
     required this.content,
     required this.timestamp,
     required this.isRead,
+    this.clientMessageId,
+    this.delivery = ChatMessageDelivery.sent,
   });
 
   factory ChatMessageModel.fromMap(Map<String, dynamic> map, String docId) {
@@ -142,6 +150,8 @@ class ChatMessageModel {
       content: map['content'] ?? '',
       timestamp: dt,
       isRead: map['isRead'] ?? false,
+      clientMessageId: map['clientMessageId']?.toString(),
+      delivery: ChatMessageDelivery.sent,
     );
   }
 
@@ -152,6 +162,38 @@ class ChatMessageModel {
       'content': content,
       'timestamp': FieldValue.serverTimestamp(),
       'isRead': isRead,
+      if (clientMessageId != null) 'clientMessageId': clientMessageId,
     };
   }
+
+  ChatMessageModel copyWith({
+    String? id,
+    ChatMessageDelivery? delivery,
+  }) =>
+      ChatMessageModel(
+        id: id ?? this.id,
+        senderId: senderId,
+        receiverId: receiverId,
+        content: content,
+        timestamp: timestamp,
+        isRead: isRead,
+        clientMessageId: clientMessageId,
+        delivery: delivery ?? this.delivery,
+      );
+}
+
+enum ChatMessageDelivery { sending, sent, failed }
+
+String optimisticMessageId(String clientMessageId) =>
+    'pending_$clientMessageId';
+
+void reconcileConfirmedChatMessage(
+  Map<String, ChatMessageModel> messages,
+  ChatMessageModel confirmed,
+) {
+  final clientId = confirmed.clientMessageId;
+  if (clientId != null) {
+    messages.remove(optimisticMessageId(clientId));
+  }
+  messages[confirmed.id] = confirmed;
 }

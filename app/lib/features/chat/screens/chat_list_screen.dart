@@ -138,13 +138,22 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                                   backgroundColor: Colors.green),
                             );
                           }
-                        } catch (e) {
+                        } on ConnectionCodeException catch (error) {
+                          if (mounted && context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                  content: Text(error.message),
+                                  backgroundColor: Colors.redAccent),
+                            );
+                          }
+                        } catch (_) {
                           if (mounted && context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                  content: Text(
-                                      "We couldn't complete that connection request. Please try again."),
-                                  backgroundColor: Colors.redAccent),
+                                content: Text(
+                                    "Couldn't connect right now. Try again."),
+                                backgroundColor: Colors.redAccent,
+                              ),
                             );
                           }
                         } finally {

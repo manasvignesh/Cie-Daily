@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/services/trusted_backend_client.dart';
 import '../data/chat_repository.dart';
 import '../models/chat_models.dart';
 import '../providers/chat_providers.dart';
@@ -31,7 +32,6 @@ class IndividualChatScreen extends ConsumerStatefulWidget {
 class _IndividualChatScreenState extends ConsumerState<IndividualChatScreen> {
   final _msgController = TextEditingController();
   final _scrollController = ScrollController();
-  bool _isSending = false;
   bool _didInitialScroll = false;
   late String _partnerUid;
   late String _partnerName;
@@ -75,23 +75,52 @@ class _IndividualChatScreenState extends ConsumerState<IndividualChatScreen> {
 
   Future<void> _sendMessage() async {
     final text = _msgController.text.trim();
-    if (text.isEmpty || _isSending || _partnerUid.isEmpty) return;
+    if (text.isEmpty || _partnerUid.isEmpty) return;
 
+    final clientMessageId = TrustedBackendClient.newRequestId();
     _msgController.clear();
-    setState(() => _isSending = true);
+    final controller =
+        ref.read(chatMessagesProvider(widget.conversationId).notifier);
+    controller.addOptimistic(
+      clientMessageId: clientMessageId,
+      senderId: FirebaseAuth.instance.currentUser!.uid,
+      receiverId: _partnerUid,
+      content: text,
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
     try {
-      await ref
-          .read(chatRepositoryProvider)
-          .sendMessage(widget.conversationId, _partnerUid, text);
-      _scrollToBottom();
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text("We couldn't send that message. Please try again.")));
-      }
-    } finally {
-      if (mounted) setState(() => _isSending = false);
+      final receipt = await ref.read(chatRepositoryProvider).sendMessage(
+            widget.conversationId,
+            _partnerUid,
+            text,
+            clientMessageId: clientMessageId,
+          );
+      controller.markAccepted(clientMessageId, messageId: receipt.messageId);
+    } catch (_) {
+      controller.markFailed(clientMessageId);
+    }
+  }
+
+  Future<void> _retryMessage(ChatMessageModel message) async {
+    final clientMessageId = message.clientMessageId;
+    if (clientMessageId == null ||
+        message.delivery != ChatMessageDelivery.failed) {
+      return;
+    }
+    final controller =
+        ref.read(chatMessagesProvider(widget.conversationId).notifier);
+    controller.retry(clientMessageId);
+    try {
+      final receipt = await ref.read(chatRepositoryProvider).sendMessage(
+            widget.conversationId,
+            _partnerUid,
+            message.content,
+            clientMessageId: clientMessageId,
+          );
+      controller.markAccepted(clientMessageId, messageId: receipt.messageId);
+    } catch (_) {
+      controller.markFailed(clientMessageId);
     }
   }
 
@@ -436,7 +465,7 @@ class _IndividualChatScreenState extends ConsumerState<IndividualChatScreen> {
                   Semantics(
                     button: true,
                     label: 'Send message',
-                    enabled: _partnerUid.isNotEmpty && !_isSending,
+                    enabled: _partnerUid.isNotEmpty,
                     child: GestureDetector(
                       onTap: _partnerUid.isEmpty ? null : _sendMessage,
                       child: Container(
@@ -469,56 +498,68 @@ class _IndividualChatScreenState extends ConsumerState<IndividualChatScreen> {
   Widget _buildMessageBubble(ChatMessageModel msg, bool isMe) {
     final sharedData = SharedPostData.tryParse(msg.content);
 
-    return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment:
-            isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          if (sharedData != null)
-            SharedPostChatCard(data: sharedData, isMe: isMe)
-          else
-            Container(
-              margin: const EdgeInsets.only(bottom: 4),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              constraints: BoxConstraints(
-                  maxWidth: MediaQuery.of(context).size.width * 0.75),
-              decoration: BoxDecoration(
-                color: isMe
-                    ? AppTheme.primaryOrange.withValues(alpha: 0.12)
-                    : AppTheme.cardColor(context),
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(20),
-                  topRight: const Radius.circular(20),
-                  bottomLeft: Radius.circular(isMe ? 20 : 4),
-                  bottomRight: Radius.circular(isMe ? 4 : 20),
-                ),
-                border: Border.all(
+    return GestureDetector(
+      onTap: msg.delivery == ChatMessageDelivery.failed
+          ? () => _retryMessage(msg)
+          : null,
+      child: Align(
+        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment:
+              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          children: [
+            if (sharedData != null)
+              SharedPostChatCard(data: sharedData, isMe: isMe)
+            else
+              Container(
+                margin: const EdgeInsets.only(bottom: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                constraints: BoxConstraints(
+                    maxWidth: MediaQuery.of(context).size.width * 0.75),
+                decoration: BoxDecoration(
                   color: isMe
-                      ? AppTheme.primaryOrange.withValues(alpha: 0.28)
-                      : AppTheme.cardBorderColor(context),
+                      ? AppTheme.primaryOrange.withValues(alpha: 0.12)
+                      : AppTheme.cardColor(context),
+                  borderRadius: BorderRadius.only(
+                    topLeft: const Radius.circular(20),
+                    topRight: const Radius.circular(20),
+                    bottomLeft: Radius.circular(isMe ? 20 : 4),
+                    bottomRight: Radius.circular(isMe ? 4 : 20),
+                  ),
+                  border: Border.all(
+                    color: isMe
+                        ? AppTheme.primaryOrange.withValues(alpha: 0.28)
+                        : AppTheme.cardBorderColor(context),
+                  ),
+                ),
+                child: Text(
+                  msg.content,
+                  style: TextStyle(
+                      color: AppTheme.primaryTextColor(context),
+                      fontSize: 15,
+                      height: 1.4,
+                      fontFamily: 'Inter'),
                 ),
               ),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12, left: 4, right: 4),
               child: Text(
-                msg.content,
+                msg.delivery == ChatMessageDelivery.sending
+                    ? 'Sending…'
+                    : msg.delivery == ChatMessageDelivery.failed
+                        ? 'Not sent · Tap to retry'
+                        : _formatMsgTime(msg.timestamp),
                 style: TextStyle(
-                    color: AppTheme.primaryTextColor(context),
-                    fontSize: 15,
-                    height: 1.4,
+                    color: msg.delivery == ChatMessageDelivery.failed
+                        ? Colors.redAccent
+                        : AppTheme.tertiaryTextColor(context),
+                    fontSize: 11,
                     fontFamily: 'Inter'),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12, left: 4, right: 4),
-            child: Text(
-              _formatMsgTime(msg.timestamp),
-              style: TextStyle(
-                  color: AppTheme.tertiaryTextColor(context),
-                  fontSize: 11,
-                  fontFamily: 'Inter'),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

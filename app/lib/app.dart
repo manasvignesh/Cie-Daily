@@ -17,20 +17,30 @@ class CIEConnectApp extends ConsumerStatefulWidget {
   ConsumerState<CIEConnectApp> createState() => _CIEConnectAppState();
 }
 
-class _CIEConnectAppState extends ConsumerState<CIEConnectApp> {
+class _CIEConnectAppState extends ConsumerState<CIEConnectApp>
+    with WidgetsBindingObserver {
   late final NotificationService _notifications;
   bool _notificationServiceReady = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _notifications = NotificationService();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _notifications.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _notifications.syncForAuthenticatedUser();
+    }
   }
 
   @override

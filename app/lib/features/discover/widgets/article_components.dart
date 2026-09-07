@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/widgets/verified_badge.dart';
 import '../models/article_image_resolver.dart';
 import '../models/structured_article_model.dart';
+import '../services/article_narration_service.dart';
+import 'narration_controls.dart';
 
 // ── 1. HERO SECTION (PROPORTIONAL COMPACT COVER IMAGE) ─────────────────────
-class ArticleHeroSection extends StatelessWidget {
+class ArticleHeroSection extends ConsumerWidget {
   final StructuredArticleData article;
   final bool isSelf;
   final bool isFollowing;
@@ -20,7 +23,7 @@ class ArticleHeroSection extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final primaryText = AppTheme.primaryTextColor(context);
     final secondaryText = AppTheme.secondaryTextColor(context);
     final borderColor = AppTheme.cardBorderColor(context);
@@ -75,7 +78,15 @@ class ArticleHeroSection extends StatelessWidget {
             height: 1.4,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 8),
+        NarrationButton(
+          articleId: article.id,
+          label: 'Listen · ${estimatedNarrationMinutes(article)} min',
+          onPlay: () =>
+              ref.read(articleNarrationProvider.notifier).playArticle(article),
+        ),
+        const CompactNarrationPlayer(),
+        const SizedBox(height: 12),
 
         // Proportional Hero Image (30-40% Viewport Width Height Proportion)
         if (article.heroImage != null && article.heroImage!.isNotEmpty) ...[

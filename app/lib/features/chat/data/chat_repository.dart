@@ -16,7 +16,7 @@ class ChatRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
   final TrustedBackendClient _backend;
-  final Map<String, Future<void>> _inFlightMessages = {};
+  final Map<String, Future<Map<String, dynamic>>> _inFlightMessages = {};
 
   ChatRepository(
     this._firestore,
@@ -57,21 +57,33 @@ class ChatRepository {
     return uid1.compareTo(uid2) < 0 ? '${uid1}_$uid2' : '${uid2}_$uid1';
   }
 
+  static String normalizeConnectionCode(String rawCode) =>
+      rawCode.trim().toUpperCase().replaceAll(RegExp(r'\s+'), '');
+
   // 1. Send Connection Request by Student Connection Code
   Future<String> sendConnectionRequest(String rawCode) async {
     final user = _currentUser;
-    if (user == null) throw Exception('Not authenticated');
+    if (user == null) {
+      throw const ConnectionCodeException('Sign in again to connect.');
+    }
 
-    final cleanCode = rawCode.trim().toUpperCase();
-    if (cleanCode.isEmpty) throw Exception('Please enter a connection code');
+    final cleanCode = normalizeConnectionCode(rawCode);
+    if (cleanCode.isEmpty) {
+      throw const ConnectionCodeException('Please enter a connection code.');
+    }
     if (!RegExp(r'^[A-Z0-9-]{7,24}$').hasMatch(cleanCode)) {
-      throw Exception('That connection code is not valid.');
+      throw const ConnectionCodeException(
+          "That connection code doesn't exist.");
     }
 
     DocumentSnapshot<Map<String, dynamic>> targetDoc;
     final mapping =
         await _firestore.collection('connectionCodes').doc(cleanCode).get();
     final mappedUid = mapping.data()?['uid']?.toString() ?? '';
+    final expiresAt = mapping.data()?['expiresAt'];
+    if (expiresAt is Timestamp && expiresAt.toDate().isBefore(DateTime.now())) {
+      throw const ConnectionCodeException('This connection code has expired.');
+    }
     if (mappedUid.isNotEmpty) {
       targetDoc = await _firestore.collection('users').doc(mappedUid).get();
       if (!targetDoc.exists) {
@@ -80,14 +92,21 @@ class ChatRepository {
     } else {
       // Backward-compatible lookup for profiles created before the reservation
       // collection existed. Self-healing profiles populate the mapping later.
-      final legacyQuery = await _firestore
+      var legacyQuery = await _firestore
           .collection('users')
           .where('connectionCode', isEqualTo: cleanCode)
           .limit(1)
           .get();
       if (legacyQuery.docs.isEmpty) {
-        throw Exception(
-            'Student code "$cleanCode" not found. Please verify the code and try again.');
+        legacyQuery = await _firestore
+            .collection('users')
+            .where('connectionCode', isEqualTo: cleanCode.toLowerCase())
+            .limit(1)
+            .get();
+      }
+      if (legacyQuery.docs.isEmpty) {
+        throw const ConnectionCodeException(
+            "That connection code doesn't exist.");
       }
       targetDoc = legacyQuery.docs.first;
     }
@@ -100,18 +119,20 @@ class ChatRepository {
         List<String>.from(targetData?['blockedUserIds'] ?? []);
 
     if (targetUid == user.uid) {
-      throw Exception('You cannot connect with yourself.');
+      throw const ConnectionCodeException("You can't connect to yourself.");
     }
 
     if (targetBlocked.contains(user.uid)) {
-      throw Exception('Unable to send connection request to this student.');
+      throw const ConnectionCodeException(
+          "Couldn't connect right now. Try again.");
     }
 
     // Check current user blocked list
     final myDoc = await _firestore.collection('users').doc(user.uid).get();
     final myBlocked = List<String>.from(myDoc.data()?['blockedUserIds'] ?? []);
     if (myBlocked.contains(targetUid)) {
-      throw Exception('You have blocked this student.');
+      throw const ConnectionCodeException(
+          'Unblock this person before connecting.');
     }
 
     // Check existing connection
@@ -119,7 +140,7 @@ class ChatRepository {
     final connDoc =
         await _firestore.collection('connections').doc(pairId).get();
     if (connDoc.exists) {
-      throw Exception('You are already connected with $targetName.');
+      throw const ConnectionCodeException("You're already connected.");
     }
 
     // Check pending request
@@ -127,8 +148,8 @@ class ChatRepository {
     final reqDoc =
         await _firestore.collection('connection_requests').doc(reqDocId).get();
     if (reqDoc.exists && reqDoc.data()?['status'] == 'pending') {
-      throw Exception(
-          'You have already sent a connection request to $targetName.');
+      throw const ConnectionCodeException(
+          'A connection request is already pending.');
     }
 
     // Get current user details for the request
@@ -284,7 +305,7 @@ class ChatRepository {
   }
 
   // 4. Send Message
-  Future<void> sendMessage(
+  Future<ChatSendReceipt> sendMessage(
     String conversationId,
     String receiverId,
     String content, {
@@ -294,34 +315,43 @@ class ChatRepository {
     if (user == null) throw Exception('Not authenticated');
 
     final cleanText = content.trim();
-    if (cleanText.isEmpty) return;
+    if (cleanText.isEmpty) throw ArgumentError('Message cannot be empty');
 
     final requestId = clientMessageId ?? TrustedBackendClient.newRequestId();
-    final rapidTapKey = '$conversationId\u0000$cleanText';
-    final existing = _inFlightMessages[rapidTapKey];
-    if (existing != null) return existing;
+    final existing = _inFlightMessages[requestId];
+    if (existing != null) {
+      final result = await existing;
+      return ChatSendReceipt(
+        clientMessageId: requestId,
+        messageId: result['messageId']?.toString(),
+      );
+    }
 
     final operation = _sendMessageThroughBackend(
       conversationId: conversationId,
       content: cleanText,
       clientMessageId: requestId,
     );
-    _inFlightMessages[rapidTapKey] = operation;
+    _inFlightMessages[requestId] = operation;
     try {
-      await operation;
+      final result = await operation;
+      return ChatSendReceipt(
+        clientMessageId: requestId,
+        messageId: result['messageId']?.toString(),
+      );
     } finally {
-      if (identical(_inFlightMessages[rapidTapKey], operation)) {
-        _inFlightMessages.remove(rapidTapKey);
+      if (identical(_inFlightMessages[requestId], operation)) {
+        _inFlightMessages.remove(requestId);
       }
     }
   }
 
-  Future<void> _sendMessageThroughBackend({
+  Future<Map<String, dynamic>> _sendMessageThroughBackend({
     required String conversationId,
     required String content,
     required String clientMessageId,
   }) async {
-    await _backend.post('send-message', {
+    return _backend.post('send-message', {
       'conversationId': conversationId,
       'content': content,
       'clientMessageId': clientMessageId,
@@ -355,4 +385,17 @@ class ChatRepository {
       'blockedUserIds': FieldValue.arrayUnion([targetUid]),
     });
   }
+}
+
+class ChatSendReceipt {
+  const ChatSendReceipt({required this.clientMessageId, this.messageId});
+  final String clientMessageId;
+  final String? messageId;
+}
+
+class ConnectionCodeException implements Exception {
+  const ConnectionCodeException(this.message);
+  final String message;
+  @override
+  String toString() => message;
 }

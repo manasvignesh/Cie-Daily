@@ -54,6 +54,7 @@ Deno.serve(async (request) => {
         senderId: user.uid,
         receiverId: recipientUid,
         content,
+        clientMessageId,
         timestamp: FieldValue.serverTimestamp(),
         isRead: false,
       });
