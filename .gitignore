@@ -6,3 +6,4 @@ app/.firebaserc
 .vscode/
 node_modules/
 app/build/
+supabase/.temp/

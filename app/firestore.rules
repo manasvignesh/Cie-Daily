@@ -74,7 +74,9 @@ service cloud.firestore {
     // REELS & POSTS
     match /posts/{postId} {
       allow read: if true;
-      allow create: if isCreator();
+      // New content is created by the trusted publish-content Edge Function.
+      // Firebase Admin bypasses rules; clients cannot impersonate publishers.
+      allow create: if false;
       allow update: if isCreator() || isMainAdmin() ||
         (isSignedIn()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'likedBy', 'bookmarkedBy', 'commentsCount'])
@@ -157,8 +159,8 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow read: if isConversationParticipant(conversationId);
-        allow create: if isConversationParticipant(conversationId)
-          && request.resource.data.senderId == request.auth.uid;
+        // Direct messages are created by the trusted send-message Edge Function.
+        allow create: if false;
         allow update, delete: if isMainAdmin() || (resource.data.senderId == request.auth.uid);
       }
     }

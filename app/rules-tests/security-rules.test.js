@@ -80,6 +80,14 @@ test('conversation and messages are participant-only', async () => {
   await assertFails(getDoc(doc(guest, 'conversations', 'alice_bob')));
 });
 
+test('direct clients cannot bypass authoritative message sending', async () => {
+  const alice = env.authenticatedContext('alice').firestore();
+  await assertFails(setDoc(
+    doc(alice, 'conversations', 'alice_bob', 'messages', 'client-bypass'),
+    {senderId: 'alice', receiverId: 'bob', content: 'bypass', isRead: false},
+  ));
+});
+
 test('connection creation and deletion require a participant', async () => {
   const alice = env.authenticatedContext('alice').firestore();
   const attacker = env.authenticatedContext('mallory').firestore();

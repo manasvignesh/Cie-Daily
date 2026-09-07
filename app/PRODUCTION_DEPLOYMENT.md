@@ -106,3 +106,9 @@ keyPassword=SET_LOCALLY
 ```
 
 The Gradle release build fails with a clear error when any value is absent.
+# Notification backend prerequisite
+
+Direct messages and creator-content publishing require the deployed Supabase
+Edge Functions described in `SUPABASE_NOTIFICATION_BACKEND.md`. Configure
+`CIE_TRUSTED_BACKEND_URL` as a Dart define when building. Do not deploy the
+Firebase notification triggers or upgrade `cie-connect` from Spark for them.

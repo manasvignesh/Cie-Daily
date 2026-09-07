@@ -1,18 +1,28 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import '../utils/shared_content_formatter.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/chat_models.dart';
+import '../../../core/services/trusted_backend_client.dart';
 
 final chatRepositoryProvider = Provider<ChatRepository>((ref) {
-  return ChatRepository(FirebaseFirestore.instance, FirebaseAuth.instance);
+  return ChatRepository(
+    FirebaseFirestore.instance,
+    FirebaseAuth.instance,
+    TrustedBackendClient(),
+  );
 });
 
 class ChatRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final TrustedBackendClient _backend;
+  final Map<String, Future<void>> _inFlightMessages = {};
 
-  ChatRepository(this._firestore, this._auth);
+  ChatRepository(
+    this._firestore,
+    this._auth, [
+    TrustedBackendClient? backend,
+  ]) : _backend = backend ?? TrustedBackendClient(auth: _auth);
 
   User? get _currentUser => _auth.currentUser;
 
@@ -275,38 +285,47 @@ class ChatRepository {
 
   // 4. Send Message
   Future<void> sendMessage(
-      String conversationId, String receiverId, String content) async {
+    String conversationId,
+    String receiverId,
+    String content, {
+    String? clientMessageId,
+  }) async {
     final user = _currentUser;
     if (user == null) throw Exception('Not authenticated');
 
     final cleanText = content.trim();
     if (cleanText.isEmpty) return;
 
-    final msgRef = _firestore
-        .collection('conversations')
-        .doc(conversationId)
-        .collection('messages')
-        .doc();
+    final requestId = clientMessageId ?? TrustedBackendClient.newRequestId();
+    final rapidTapKey = '$conversationId\u0000$cleanText';
+    final existing = _inFlightMessages[rapidTapKey];
+    if (existing != null) return existing;
 
-    final batch = _firestore.batch();
+    final operation = _sendMessageThroughBackend(
+      conversationId: conversationId,
+      content: cleanText,
+      clientMessageId: requestId,
+    );
+    _inFlightMessages[rapidTapKey] = operation;
+    try {
+      await operation;
+    } finally {
+      if (identical(_inFlightMessages[rapidTapKey], operation)) {
+        _inFlightMessages.remove(rapidTapKey);
+      }
+    }
+  }
 
-    batch.set(msgRef, {
-      'senderId': user.uid,
-      'receiverId': receiverId,
-      'content': cleanText,
-      'timestamp': FieldValue.serverTimestamp(),
-      'isRead': false,
+  Future<void> _sendMessageThroughBackend({
+    required String conversationId,
+    required String content,
+    required String clientMessageId,
+  }) async {
+    await _backend.post('send-message', {
+      'conversationId': conversationId,
+      'content': content,
+      'clientMessageId': clientMessageId,
     });
-
-    final convRef = _firestore.collection('conversations').doc(conversationId);
-    batch.update(convRef, {
-      'lastMessage': sharedContentPreview(cleanText),
-      'lastMessageSenderId': user.uid,
-      'lastMessageTimestamp': FieldValue.serverTimestamp(),
-      'unreadCounts.$receiverId': FieldValue.increment(1),
-    });
-
-    await batch.commit();
   }
 
   // 5. Mark Conversation as Read

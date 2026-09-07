@@ -94,6 +94,10 @@ exports.notifyDirectMessage = onDocumentCreated(
     },
 );
 
+// DEPRECATED / DO NOT DEPLOY on Firebase Spark: notification delivery now runs
+// through the Supabase send-message and publish-content Edge Functions. This
+// implementation remains temporarily as reviewed rollback/reference code only.
+
 exports.notifyCreatorPost = onDocumentCreated(
     {
       document: 'posts/{postId}',

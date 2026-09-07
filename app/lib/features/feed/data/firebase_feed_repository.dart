@@ -5,18 +5,25 @@ import '../models/post_model.dart';
 import '../domain/feed_repository.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/errors/error_mapper.dart';
+import '../../../core/services/trusted_backend_client.dart';
 
 final feedRepositoryProvider =
     Provider<FeedRepository>((ref) => FirebaseFeedRepository(
           FirebaseFirestore.instance,
           FirebaseAuth.instance,
+          TrustedBackendClient(),
         ));
 
 class FirebaseFeedRepository implements FeedRepository {
   final FirebaseFirestore _firestore;
   final FirebaseAuth _auth;
+  final TrustedBackendClient _backend;
 
-  FirebaseFeedRepository(this._firestore, this._auth);
+  FirebaseFeedRepository(
+    this._firestore,
+    this._auth, [
+    TrustedBackendClient? backend,
+  ]) : _backend = backend ?? TrustedBackendClient(auth: _auth);
 
   @override
   Future<List<PostModel>> fetchPosts({int offset = 0, int limit = 10}) async {
@@ -232,38 +239,11 @@ class FirebaseFeedRepository implements FeedRepository {
     }
 
     try {
-      final userDoc = await _firestore.collection('users').doc(userId).get();
-      final userData = userDoc.data();
-      final authorName = userData?['name'] ??
-          userData?['fullName'] ??
-          _auth.currentUser?.displayName ??
-          _auth.currentUser?.email?.split('@').first ??
-          'Student';
-      final authorAvatar = userData?['photoUrl'] ??
-          userData?['avatarUrl'] ??
-          _auth.currentUser?.photoURL;
-      final authorEmail = _auth.currentUser?.email;
-
       final postData = <String, dynamic>{
         'title': post.title,
         'blocks': post.blocks,
         'category': post.category,
         'estimatedReadTime': post.estimatedReadTime,
-        'authorId': userId,
-        'authorName': authorName,
-        'authorAvatar': authorAvatar,
-        'authorEmail': authorEmail,
-        'author': {
-          'name': authorName,
-          'fullName': authorName,
-          'avatarUrl': authorAvatar,
-          'email': authorEmail,
-        },
-        'createdAt': FieldValue.serverTimestamp(),
-        'likesCount': 0,
-        'commentsCount': 0,
-        'likedBy': [],
-        'bookmarkedBy': [],
         'isTodaysDrop': post.isTodaysDrop,
         'status': 'approved',
       };
@@ -280,9 +260,10 @@ class FirebaseFeedRepository implements FeedRepository {
         postData['aspectRatio'] = post.aspectRatio!;
       }
 
-      // Push fan-out is handled by the trusted Firestore trigger. Keeping it
-      // server-side prevents clients from impersonating notification senders.
-      await _firestore.collection('posts').add(postData);
+      await _backend.post('publish-content', {
+        'clientContentId': TrustedBackendClient.newRequestId(),
+        'post': postData,
+      });
     } catch (error, stackTrace) {
       throw ErrorMapper.normalize(error, stackTrace: stackTrace);
     }

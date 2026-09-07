@@ -1,0 +1,7 @@
+project_id = "cie-daily-notifications"
+
+[functions.send-message]
+verify_jwt = false
+
+[functions.publish-content]
+verify_jwt = false
