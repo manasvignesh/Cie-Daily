@@ -10,8 +10,10 @@ import { errorResponse, HttpError, json, readJson, requiredString } from "../_sh
 import { cleanText, deliverToUser, enforceRateLimit } from "../_shared/notifications.ts";
 
 Deno.serve(async (request) => {
+  let stage = "authenticate";
   try {
     const user = await verifyFirebaseUser(request);
+    stage = "validate_request";
     const body = await readJson(request);
     if (rejectsSenderClaim(body.senderId, user.uid)) {
       throw new HttpError(403, "sender_impersonation", "The sender does not match your account.");
@@ -22,8 +24,10 @@ Deno.serve(async (request) => {
     if (!/^[A-Za-z0-9_-]{8,100}$/.test(clientMessageId)) {
       throw new HttpError(400, "invalid_request", "clientMessageId is invalid.");
     }
+    stage = "rate_limit";
     await enforceRateLimit(user.uid);
 
+    stage = "load_sender";
     const db = firebase.db();
     const conversationRef = db.collection("conversations").doc(conversationId);
     const senderRef = db.collection("users").doc(user.uid);
@@ -31,6 +35,7 @@ Deno.serve(async (request) => {
     const messageRef = conversationRef.collection("messages").doc(messageId);
     const senderSnapshot = await senderRef.get();
 
+    stage = "write_message";
     const transactionResult = await db.runTransaction(async (transaction) => {
       const [conversationSnapshot, existing] = await Promise.all([
         transaction.get(conversationRef),
@@ -62,6 +67,7 @@ Deno.serve(async (request) => {
     });
     const { created, recipientUid, conversation } = transactionResult;
 
+    stage = "load_recipient";
     const [senderData, recipientData] = await Promise.all([
       Promise.resolve(senderSnapshot.data() ?? {}),
       db.collection("users").doc(recipientUid).get().then((value) => value.data() ?? {}),
@@ -69,6 +75,7 @@ Deno.serve(async (request) => {
     const participant = conversation.participantDetails?.[user.uid] ?? {};
     const senderName = cleanText(senderData.name ?? participant.name ?? user.name, "New message", 80);
     const previewsEnabled = recipientData.notificationPreferences?.messagePreviews !== false;
+    stage = "deliver_notification";
     const notification = await deliverToUser({
       uid: recipientUid,
       notificationId: `chat_${conversationId}_${messageId}_${recipientUid}`,
@@ -87,6 +94,6 @@ Deno.serve(async (request) => {
 
     return json({ ok: true, messageId, created, pushSent: notification.sent });
   } catch (error) {
-    return errorResponse(error);
+    return errorResponse(error, stage);
   }
 });

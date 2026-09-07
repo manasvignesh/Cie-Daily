@@ -1,8 +1,20 @@
 import { cert, getApps, initializeApp } from "npm:firebase-admin@13.4.0/app";
-import { getAuth, type DecodedIdToken } from "npm:firebase-admin@13.4.0/auth";
 import { getFirestore } from "npm:firebase-admin@13.4.0/firestore";
 import { getMessaging } from "npm:firebase-admin@13.4.0/messaging";
+import { createRemoteJWKSet, jwtVerify } from "npm:jose@5.10.0";
 import { HttpError } from "./http.ts";
+
+export type VerifiedFirebaseUser = {
+  uid: string;
+  sub: string;
+  email?: string;
+  name?: string;
+  [key: string]: unknown;
+};
+
+const firebaseJwks = createRemoteJWKSet(new URL(
+  "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
+));
 
 function serviceAccount(): Record<string, string> {
   const raw = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
@@ -29,19 +41,47 @@ function firebaseApp() {
   });
 }
 
+let firestore: ReturnType<typeof getFirestore> | undefined;
+
+function firebaseFirestore() {
+  if (firestore) return firestore;
+  firestore = getFirestore(firebaseApp());
+  // Supabase Edge Functions run on Deno Deploy, where the Firestore gRPC
+  // transport can stall. Force the supported HTTP/1.1 REST transport.
+  firestore.settings({ preferRest: true });
+  return firestore;
+}
+
 export const firebase = {
-  auth: () => getAuth(firebaseApp()),
-  db: () => getFirestore(firebaseApp()),
+  db: firebaseFirestore,
   messaging: () => getMessaging(firebaseApp()),
 };
 
-export async function verifyFirebaseUser(request: Request): Promise<DecodedIdToken> {
+export async function verifyFirebaseUser(request: Request): Promise<VerifiedFirebaseUser> {
   const value = request.headers.get("authorization") ?? "";
   const match = /^Bearer\s+(.+)$/i.exec(value);
   if (!match?.[1]) throw new HttpError(401, "unauthenticated", "Sign in again to continue.");
   try {
-    return await firebase.auth().verifyIdToken(match[1], true);
-  } catch {
+    const projectId = Deno.env.get("FIREBASE_PROJECT_ID") ?? "cie-connect";
+    const { payload } = await jwtVerify(match[1], firebaseJwks, {
+      algorithms: ["RS256"],
+      audience: projectId,
+      issuer: `https://securetoken.google.com/${projectId}`,
+      clockTolerance: 5,
+    });
+    if (!payload.sub || payload.sub.length > 128) throw new Error("Invalid Firebase subject");
+    return {
+      ...payload,
+      uid: payload.sub,
+      sub: payload.sub,
+      email: typeof payload.email === "string" ? payload.email : undefined,
+      name: typeof payload.name === "string" ? payload.name : undefined,
+    };
+  } catch (error) {
+    console.error("Firebase ID token verification failed", {
+      name: error instanceof Error ? error.name : "unknown",
+      code: (error as { code?: string })?.code ?? "unknown",
+    });
     throw new HttpError(401, "unauthenticated", "Your session expired. Sign in again.");
   }
 }

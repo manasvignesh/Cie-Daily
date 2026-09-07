@@ -11,12 +11,20 @@ export function json(body: unknown, status = 200): Response {
   });
 }
 
-export function errorResponse(error: unknown): Response {
+export function errorResponse(error: unknown, stage?: string): Response {
   if (error instanceof HttpError) {
     return json({ error: error.code, message: error.message }, error.status);
   }
+  const rawCode = (error as { code?: unknown })?.code;
+  const safeCode = typeof rawCode === "string" && /^[a-z0-9_./-]{1,100}$/i.test(rawCode)
+    ? rawCode
+    : "unknown";
+  const rawName = error instanceof Error ? error.name : "unknown";
+  const safeName = /^[a-z0-9_.-]{1,80}$/i.test(rawName) ? rawName : "unknown";
   console.error("Edge function failed", {
-    name: error instanceof Error ? error.name : "unknown",
+    name: safeName,
+    code: safeCode,
+    stage: stage ?? "unknown",
   });
   return json({
     error: "service_unavailable",
