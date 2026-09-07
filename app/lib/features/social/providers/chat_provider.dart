@@ -20,7 +20,7 @@ final inboxProvider = FutureProvider<List<ConversationItem>>((ref) async {
     ConversationItem(
       id: '1',
       name: 'MLRIT Innovation Club',
-      lastMessageText: 'Welcome to the CIE Connect platform!',
+      lastMessageText: 'Welcome to Breakpoint!',
       isGroup: true,
     ),
     ConversationItem(

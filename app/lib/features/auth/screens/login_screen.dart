@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/breakpoint_logo.dart';
 import '../../../core/widgets/buttons/primary_button.dart';
 import '../../../core/widgets/buttons/secondary_button.dart';
 import '../../../core/widgets/overlays/app_toast.dart';
@@ -118,68 +119,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Logo Container
-                Container(
-                  height: 84,
-                  width: 84,
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(22),
-                    gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFFFF8A00),
-                        Color(0xFFFF5A1F),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFFF5A1F).withValues(alpha: 0.25),
-                        blurRadius: 20,
-                        spreadRadius: 1,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      color: Colors.white,
-                    ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Image.asset(
-                        'assets/icons/app_logo.png',
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Header Text
-                Text(
-                  'Welcome to Cie Daily',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w900,
-                    fontFamily: 'Outfit',
-                    letterSpacing: -0.5,
-                    color: primaryTextColor,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Stay Informed. Stay Ahead.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: secondaryTextColor,
-                    fontWeight: FontWeight.w500,
-                    fontFamily: 'Inter',
-                  ),
+                // Breakpoint Logo Header
+                const BreakpointLogo(
+                  fontSize: 28,
+                  showLockup: true,
+                  showTagline: true,
                 ),
                 const SizedBox(height: 32),
 

@@ -1,30 +1,32 @@
 import 'package:flutter/material.dart';
 
+/// Centralized Design Tokens for Breakpoint by Manas
 class AppTheme {
-  // Brand Accent Color
-  static const Color primaryOrange = Color(0xFFFF5A1F);
+  // ── BRAND COLOR PALETTE ──────────────────────────────────────────────────
+  /// Signal Orange: Primary brand accent / breakpoint marker / active state
+  static const Color primaryOrange = Color(0xFFFF6A1A);
+  static const Color secondaryOrange = Color(0xFFD65510);
+  static const Color softEmber = Color(0xFFFF8542);
 
-  // Dark Theme Palette (iOS-Inspired Near-Black & Charcoal)
-  static const Color darkBackground = Color(0xFF08080A);
-  static const Color darkSurface = Color(0xFF141419);
-  static const Color darkSurfaceElevated = Color(0xFF1C1C22);
-  static const Color darkBorder = Color(0xFF22222A);
-  static const Color darkPrimaryText = Color(0xFFF5F5F7);
-  static const Color darkSecondaryText = Color(0xFF8E8E93);
-  static const Color darkTertiaryText = Color(0xFF545458);
+  // ── DARK THEME PALETTE (INK BLACK & GRAPHITE) ────────────────────────────
+  static const Color darkBackground = Color(0xFF080B0C); // Ink Black
+  static const Color darkSurface = Color(0xFF171B1F); // Graphite
+  static const Color darkSurfaceElevated = Color(0xFF22262B);
+  static const Color darkBorder = Color(0xFF2C3137);
+  static const Color darkPrimaryText = Color(0xFFEDE9E0); // Bone White
+  static const Color darkSecondaryText = Color(0xFF8E8E93); // Muted Gray
+  static const Color darkTertiaryText = Color(0xFF5A5E66);
 
-  // Light Theme Palette (Warm Off-White Editorial)
+  // ── LIGHT THEME PALETTE (WARM EDITORIAL) ─────────────────────────────────
   static const Color lightBackground = Color(0xFFF6F6F4);
   static const Color lightSurface = Color(0xFFFFFFFF);
   static const Color lightSurfaceElevated = Color(0xFFF0F0EE);
   static const Color lightBorder = Color(0xFFE5E5EA);
-  static const Color lightPrimaryText = Color(0xFF1C1C1E);
+  static const Color lightPrimaryText = Color(0xFF111315);
   static const Color lightSecondaryText = Color(0xFF6E6E73);
   static const Color lightTertiaryText = Color(0xFF8E8E93);
 
-  static const Color secondaryOrange = Color(0xFFFF8A00);
-
-  // Theme Helpers
+  // ── THEME HELPERS ────────────────────────────────────────────────────────
   static bool isDark(BuildContext context) {
     return Theme.of(context).brightness == Brightness.dark;
   }
@@ -69,7 +71,7 @@ class AppTheme {
     return isDark(context) ? darkSurface : lightSurface;
   }
 
-  // ── DARK THEME SPECIFICATION ──────────────────────────────────────────────
+  // ── DARK THEME DEFINITION ────────────────────────────────────────────────
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
@@ -77,8 +79,10 @@ class AppTheme {
       scaffoldBackgroundColor: darkBackground,
       colorScheme: const ColorScheme.dark(
         primary: primaryOrange,
+        secondary: secondaryOrange,
         surface: darkSurface,
         onSurface: darkPrimaryText,
+        outline: darkBorder,
       ),
       fontFamily: 'Inter',
       appBarTheme: const AppBarTheme(
@@ -88,10 +92,10 @@ class AppTheme {
         iconTheme: IconThemeData(color: darkPrimaryText),
         titleTextStyle: TextStyle(
           color: darkPrimaryText,
-          fontSize: 28,
-          fontWeight: FontWeight.bold,
+          fontSize: 26,
+          fontWeight: FontWeight.w800,
           fontFamily: 'Outfit',
-          letterSpacing: -0.5,
+          letterSpacing: -0.4,
         ),
       ),
       cardTheme: CardThemeData(
@@ -102,18 +106,16 @@ class AppTheme {
           side: const BorderSide(color: darkBorder, width: 1),
         ),
       ),
-
-      // ── TYPOGRAPHY HIERARCHY (SF PRO FEEL) ─────────────────────────────────
       textTheme: const TextTheme(
         displayLarge: TextStyle(
             fontSize: 34,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w900,
             color: darkPrimaryText,
             fontFamily: 'Outfit',
             letterSpacing: -0.8),
         displayMedium: TextStyle(
             fontSize: 28,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w800,
             color: darkPrimaryText,
             fontFamily: 'Outfit',
             letterSpacing: -0.5),
@@ -149,13 +151,18 @@ class AppTheme {
         labelSmall: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: darkTertiaryText,
+            color: darkSecondaryText,
             fontFamily: 'Inter'),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: darkBorder,
+        thickness: 1,
+        space: 1,
       ),
     );
   }
 
-  // ── LIGHT THEME SPECIFICATION ─────────────────────────────────────────────
+  // ── LIGHT THEME DEFINITION ───────────────────────────────────────────────
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,
@@ -163,8 +170,10 @@ class AppTheme {
       scaffoldBackgroundColor: lightBackground,
       colorScheme: const ColorScheme.light(
         primary: primaryOrange,
+        secondary: secondaryOrange,
         surface: lightSurface,
         onSurface: lightPrimaryText,
+        outline: lightBorder,
       ),
       fontFamily: 'Inter',
       appBarTheme: const AppBarTheme(
@@ -174,10 +183,10 @@ class AppTheme {
         iconTheme: IconThemeData(color: lightPrimaryText),
         titleTextStyle: TextStyle(
           color: lightPrimaryText,
-          fontSize: 28,
-          fontWeight: FontWeight.bold,
+          fontSize: 26,
+          fontWeight: FontWeight.w800,
           fontFamily: 'Outfit',
-          letterSpacing: -0.5,
+          letterSpacing: -0.4,
         ),
       ),
       cardTheme: CardThemeData(
@@ -188,18 +197,16 @@ class AppTheme {
           side: const BorderSide(color: lightBorder, width: 1),
         ),
       ),
-
-      // ── TYPOGRAPHY HIERARCHY (LIGHT) ───────────────────────────────────────
       textTheme: const TextTheme(
         displayLarge: TextStyle(
             fontSize: 34,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w900,
             color: lightPrimaryText,
             fontFamily: 'Outfit',
             letterSpacing: -0.8),
         displayMedium: TextStyle(
             fontSize: 28,
-            fontWeight: FontWeight.bold,
+            fontWeight: FontWeight.w800,
             color: lightPrimaryText,
             fontFamily: 'Outfit',
             letterSpacing: -0.5),
@@ -235,8 +242,13 @@ class AppTheme {
         labelSmall: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: lightTertiaryText,
+            color: lightSecondaryText,
             fontFamily: 'Inter'),
+      ),
+      dividerTheme: const DividerThemeData(
+        color: lightBorder,
+        thickness: 1,
+        space: 1,
       ),
     );
   }

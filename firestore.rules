@@ -51,11 +51,11 @@ service cloud.firestore {
 
     // REELS & POSTS
     match /posts/{postId} {
-      allow read: if isSignedIn();
-      allow create: if isCreator() && request.resource.data.authorId == request.auth.uid;
-      allow update: if isMainAdmin() || (isCreator() && resource.data.authorId == request.auth.uid) ||
+      allow read: if true;
+      allow create: if isCreator();
+      allow update: if isCreator() || isMainAdmin() ||
         (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likesCount', 'likedBy', 'bookmarkedBy', 'commentsCount']));
-      allow delete: if isMainAdmin() || (isCreator() && resource.data.authorId == request.auth.uid);
+      allow delete: if isCreator() || isMainAdmin();
     }
 
     match /reels/{reelId} {
@@ -76,7 +76,7 @@ service cloud.firestore {
     match /liveStreams/{streamId} {
       allow read: if isSignedIn();
       allow create: if isCreator() && request.resource.data.hostId == request.auth.uid;
-      allow update, delete: if isMainAdmin() || (isCreator() && resource.data.hostId == request.auth.uid);
+      allow update, delete: if isMainAdmin() || (resource.data.hostId == request.auth.uid);
 
       match /messages/{messageId} {
         allow read: if isSignedIn();
@@ -92,6 +92,12 @@ service cloud.firestore {
     }
 
     // CHAT & CONNECTIONS SYSTEM
+    match /connectionCodes/{code} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && (request.resource.data.uid == request.auth.uid || isMainAdmin());
+      allow delete: if isMainAdmin();
+    }
+
     match /connection_requests/{requestId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.senderId == request.auth.uid;

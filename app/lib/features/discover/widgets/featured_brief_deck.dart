@@ -539,7 +539,7 @@ class _DeckHero extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 child: Text(
-                  category.isEmpty ? 'CIE DAILY' : category.toUpperCase(),
+                  category.isEmpty ? 'BREAKPOINT' : category.toUpperCase(),
                   style: TextStyle(
                     color: hasImage ? Colors.white : AppTheme.primaryOrange,
                     fontWeight: FontWeight.w800,

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/breakpoint_logo.dart';
 import '../../../core/theme/responsive.dart';
 import '../models/live_stream_model.dart';
 import '../providers/spaces_provider.dart';
@@ -86,15 +87,21 @@ class _SpacesHomeScreenState extends ConsumerState<SpacesHomeScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                'Spaces',
-                style: TextStyle(
-                  color: primaryText,
-                  fontFamily: 'Outfit',
-                  fontSize: compact ? 29 : 32,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.7,
-                ),
+              Row(
+                children: [
+                  Text(
+                    'Spaces',
+                    style: TextStyle(
+                      color: primaryText,
+                      fontFamily: 'Outfit',
+                      fontSize: compact ? 29 : 32,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.7,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const BreakpointDotMarker(size: 8, isLive: true),
+                ],
               ),
               const SizedBox(height: 3),
               Text(
@@ -323,7 +330,9 @@ class _StatusBadge extends StatelessWidget {
           width: 7,
           height: 7,
           decoration: BoxDecoration(
-            color: AppTheme.primaryOrange,
+            color: isLive
+                ? AppTheme.primaryOrange
+                : AppTheme.tertiaryTextColor(context),
             shape: BoxShape.circle,
             boxShadow: isLive
                 ? [
@@ -337,7 +346,7 @@ class _StatusBadge extends StatelessWidget {
         ),
         const SizedBox(width: 7),
         Text(
-          isLive ? 'LIVE NOW' : 'Opening soon',
+          isLive ? 'LIVE NOW' : 'NOT LIVE',
           style: TextStyle(
             color: isLive ? AppTheme.primaryOrange : secondaryText,
             fontFamily: 'Inter',
@@ -708,7 +717,7 @@ class _FounderNote extends StatelessWidget {
             child: const Padding(
               padding: EdgeInsets.symmetric(vertical: 4),
               child: Text(
-                'Review CIE Daily on the Play Store →',
+                'Review Breakpoint on the Play Store →',
                 style: TextStyle(
                   color: AppTheme.primaryOrange,
                   fontFamily: 'Inter',

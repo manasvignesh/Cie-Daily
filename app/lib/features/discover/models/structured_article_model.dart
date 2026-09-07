@@ -324,7 +324,7 @@ class StructuredArticleData {
           : firstText,
       heroImage: post.imageUrl,
       authorName:
-          post.authorName.isNotEmpty ? post.authorName : 'Cie Daily Member',
+          post.authorName.isNotEmpty ? post.authorName : 'Breakpoint Member',
       authorAvatar: post.authorAvatar,
       authorId: post.authorId,
       isAuthorVerified: post.isAuthorVerified,
@@ -333,7 +333,7 @@ class StructuredArticleData {
       keyNumbers: const [
         KeyNumberItem(value: '1 Min', label: 'Read Time'),
         KeyNumberItem(value: '100%', label: 'Verified'),
-        KeyNumberItem(value: 'Cie Daily', label: 'Publication'),
+        KeyNumberItem(value: 'Breakpoint', label: 'Publication'),
       ],
       whyItMatters: fullText.length > 120
           ? '${fullText.substring(0, 120)}...'
@@ -346,14 +346,14 @@ class StructuredArticleData {
           expandedContent: Text(
             fullText.isNotEmpty
                 ? fullText
-                : 'Verified content published on Cie Daily campus network.',
+                : 'Verified content published on Breakpoint network.',
             style: const TextStyle(height: 1.5, fontSize: 13),
           ),
         ),
       ],
       takeaways: const [
-        'Verified story content reviewed on Cie Daily',
-        'Published by authentic campus author',
+        'Verified story content reviewed on Breakpoint',
+        'Published by authentic author',
       ],
     );
   }

@@ -15,8 +15,10 @@ import '../../../core/widgets/data_display/app_avatar.dart';
 import '../../chat/providers/chat_providers.dart';
 import '../../user/data/firebase_user_repository.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/breakpoint_logo.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/services/cloudinary_service.dart';
+import '../../../core/errors/error_mapper.dart';
 
 String _profileString(
   Map<String, dynamic>? data,
@@ -40,34 +42,53 @@ int _profileCount(
   return list is List ? list.length : 0;
 }
 
-List<Map<String, dynamic>> _parseHighlights(Object? value) {
-  const defaults = <Map<String, dynamic>>[
-    {'label': 'Campus', 'color': '0xFFFF5A1F'},
-    {'label': 'Events', 'color': '0xFF5856D6'},
-    {'label': 'Sports', 'color': '0xFF34C759'},
-    {'label': 'Art', 'color': '0xFFFF2D55'},
-    {'label': 'Tech', 'color': '0xFF007AFF'},
+List<String> _parseInterests(Map<String, dynamic>? profileData) {
+  const defaults = <String>[
+    'Campus',
+    'Events',
+    'Sports',
+    'Art',
+    'Tech',
   ];
-  if (value == null) {
-    return defaults.map((item) => Map<String, dynamic>.from(item)).toList();
-  }
-  if (value is! Iterable) {
-    return defaults.map((item) => Map<String, dynamic>.from(item)).toList();
+  if (profileData == null) return defaults;
+
+  if (profileData.containsKey('interests')) {
+    final raw = profileData['interests'];
+    if (raw is Iterable) {
+      final result = <String>[];
+      for (final item in raw) {
+        if (item is String && item.trim().isNotEmpty) {
+          final val = item.trim();
+          if (!result.contains(val)) result.add(val);
+        }
+      }
+      return result;
+    }
   }
 
-  final highlights = <Map<String, dynamic>>[];
-  for (final item in value) {
-    if (item is! Map) continue;
-    final map = Map<String, dynamic>.from(item);
-    final label = map['label'];
-    if (label is! String || label.trim().isEmpty) continue;
-    highlights.add({
-      'label': label.trim(),
-      if (map['color'] is String) 'color': map['color'],
-    });
+  if (profileData.containsKey('highlights')) {
+    final raw = profileData['highlights'];
+    if (raw is Iterable) {
+      final result = <String>[];
+      for (final item in raw) {
+        if (item is Map) {
+          final label = item['label'];
+          if (label is String && label.trim().isNotEmpty) {
+            final val = label.trim();
+            if (!result.contains(val)) result.add(val);
+          }
+        } else if (item is String && item.trim().isNotEmpty) {
+          final val = item.trim();
+          if (!result.contains(val)) result.add(val);
+        }
+      }
+      if (result.isNotEmpty) return result;
+    }
   }
-  return highlights;
+
+  return defaults;
 }
+
 
 class ProfileScreen extends ConsumerStatefulWidget {
   final String? targetUserId;
@@ -168,13 +189,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
         final photoUrl = storedPhotoUrl.isNotEmpty
             ? storedPhotoUrl
             : (isSelf ? user.photoURL : null);
-        final email = profileEmail;
         final postsCount = userPostsAsync.value?.length ?? 0;
         final savedCount = bookmarkedPostsAsync.value?.length ?? 0;
         final likedCount = likedPostsAsync.value?.length ?? 0;
         final connectionsCount = conversationsAsync.value?.length ?? 0;
-
-        final highlights = _parseHighlights(profileData?['highlights']);
+        final interests = _parseInterests(profileData);
         final connectionCode = selfConnectionCodeAsync?.valueOrNull ??
             _profileString(profileData, 'connectionCode');
 
@@ -200,21 +219,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // ── STRUCTURED PROFILE CARD ─────────────────────────────
+                      // ── 1. HERO CARD ───────────────────────────────────────
                       _buildProfileHeaderCard(
                         context,
                         photoUrl: photoUrl,
                         displayName: displayName,
                         handle: handle,
-                        email: email,
                         bio: bio,
                         department: department,
                         yearOfStudy: yearOfStudy,
-                        connectionCode: connectionCode,
                         isCreatorOrAdmin: isCreatorOrAdmin,
                       ),
 
-                      // ── STATS DASHBOARD CARD ───────────────────────────────
+                      // ── 2. STATS ROW ───────────────────────────────────────
                       _buildStatsRow(
                         context,
                         isStudent: isStudent,
@@ -234,7 +251,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         ),
                       ),
 
-                      // ── ACTION BUTTONS ─────────────────────────────────────
+                      // ── 3. PRIMARY ACTION BUTTONS ──────────────────────────
                       _buildActionButtons(
                         context,
                         name: displayName,
@@ -242,14 +259,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         department: department,
                         yearOfStudy: yearOfStudy,
                         photoUrl: photoUrl,
-                        highlights: highlights,
                         isSelf: isSelf,
                         viewedUid: viewedUid,
                         isFollowing: isFollowing,
                       ),
 
-                      // ── INTERESTS CARD ─────────────────────────────────────
-                      _buildHighlights(context, highlights),
+                      // ── 4. CONNECTION CODE CARD ────────────────────────────
+                      if (isSelf)
+                        _buildConnectionCodeCard(context, connectionCode),
+
+                      // ── 5. INTERESTS & FOCUS AREAS CARD ───────────────────
+                      _buildInterestsCard(
+                        context,
+                        interests: interests,
+                        isSelf: isSelf,
+                      ),
                     ],
                   ),
                 ),
@@ -415,14 +439,21 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
           ? SystemUiOverlayStyle.light
           : SystemUiOverlayStyle.dark,
       leading: const SizedBox.shrink(),
-      title: Text(
-        'Profile',
-        style: TextStyle(
-            color: iconColor,
-            fontWeight: FontWeight.w900,
-            fontSize: 24,
-            fontFamily: 'Outfit',
-            letterSpacing: -0.5),
+      title: Row(
+        children: [
+          Text(
+            'Profile',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: iconColor,
+              fontFamily: 'Outfit',
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const BreakpointDotMarker(size: 8),
+        ],
       ),
       centerTitle: false,
       actions: [
@@ -455,11 +486,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required String? photoUrl,
     required String displayName,
     required String handle,
-    required String email,
     required String bio,
     required String department,
     required String yearOfStudy,
-    required String connectionCode,
     required bool isCreatorOrAdmin,
   }) {
     final primaryColor = AppTheme.primaryTextColor(context);
@@ -469,7 +498,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     final isDark = AppTheme.isDark(context);
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: cardColor,
@@ -568,34 +597,85 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               fontFamily: 'Inter',
             ),
           ),
+        ],
+      ),
+    );
+  }
 
-          if (email.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Row(
+  Widget _buildConnectionCodeCard(
+    BuildContext context,
+    String connectionCode,
+  ) {
+    if (connectionCode.isEmpty) return const SizedBox.shrink();
+
+    final primaryColor = AppTheme.primaryTextColor(context);
+    final secondaryColor = AppTheme.secondaryTextColor(context);
+    final cardColor = AppTheme.cardColor(context);
+    final borderColor = AppTheme.cardBorderColor(context);
+    final isDark = AppTheme.isDark(context);
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: borderColor, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryOrange.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.qr_code_rounded,
+              color: AppTheme.primaryOrange,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.mail_outline_rounded,
-                    color: secondaryColor, size: 14),
-                const SizedBox(width: 6),
                 Text(
-                  email,
+                  'Connection Code',
                   style: TextStyle(
                     color: secondaryColor,
-                    fontSize: 12.5,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
                     fontFamily: 'Inter',
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  connectionCode,
+                  style: TextStyle(
+                    color: primaryColor,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                    fontFamily: 'Outfit',
+                    letterSpacing: 1.0,
                   ),
                 ),
               ],
             ),
-          ],
-
-          if (connectionCode.isNotEmpty) ...[
-            Container(
-              margin: const EdgeInsets.only(top: 14),
-              height: 1,
-              color: borderColor,
-            ),
-            const SizedBox(height: 14),
-            GestureDetector(
+          ),
+          Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(20),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(20),
               onTap: () {
                 Clipboard.setData(ClipboardData(text: connectionCode));
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -606,66 +686,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 );
               },
               child: Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.surfaceMutedColor(context),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: borderColor, width: 1),
+                  color: AppTheme.primaryOrange.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryOrange.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.qr_code_rounded,
-                          color: AppTheme.primaryOrange, size: 18),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Connection Code',
-                            style: TextStyle(
-                              color: secondaryColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'Inter',
-                            ),
-                          ),
-                          Text(
-                            connectionCode,
-                            style: TextStyle(
-                              color: primaryColor,
-                              fontSize: 15,
-                              fontWeight: FontWeight.w900,
-                              fontFamily: 'Outfit',
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppTheme.primaryOrange.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.copy_rounded,
-                          color: AppTheme.primaryOrange, size: 16),
-                    ),
-                  ],
+                child: const Icon(
+                  Icons.copy_rounded,
+                  color: AppTheme.primaryOrange,
+                  size: 18,
                 ),
               ),
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -759,7 +792,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required String department,
     required String yearOfStudy,
     required String? photoUrl,
-    required List<Map<String, dynamic>> highlights,
     required bool isSelf,
     required String? viewedUid,
     required bool isFollowing,
@@ -849,7 +881,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     if (user == null) return;
 
     Clipboard.setData(ClipboardData(
-        text: 'Check out $displayName on CIE Connect! Email: ${user.email}'));
+        text: 'Check out $displayName on Breakpoint! Email: ${user.email}'));
 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
@@ -859,8 +891,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  Widget _buildHighlights(
-      BuildContext context, List<Map<String, dynamic>> highlights) {
+  Widget _buildInterestsCard(
+    BuildContext context, {
+    required List<String> interests,
+    required bool isSelf,
+  }) {
     final primaryText = AppTheme.primaryTextColor(context);
     final cardColor = AppTheme.cardColor(context);
     final borderColor = AppTheme.cardBorderColor(context);
@@ -896,29 +931,41 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   fontFamily: 'Outfit',
                 ),
               ),
-              GestureDetector(
-                onTap: () => _showAddHighlightSheet(context, highlights),
-                child: Text(
-                  highlights.isEmpty ? '+ Add interests' : 'Edit',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppTheme.primaryOrange,
-                    fontFamily: 'Inter',
+              if (isSelf)
+                Material(
+                  color: Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: () => _showEditInterestsSheet(
+                      context,
+                      currentInterests: interests,
+                    ),
+                    child: Padding(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Text(
+                        interests.isEmpty ? '+ Add interests' : 'Edit',
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.primaryOrange,
+                          fontFamily: 'Inter',
+                        ),
+                      ),
+                    ),
                   ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 10),
           Container(height: 1, color: borderColor),
           const SizedBox(height: 12),
-          if (highlights.isNotEmpty)
+          if (interests.isNotEmpty)
             Wrap(
               spacing: 8,
               runSpacing: 8,
-              children: highlights.map((h) {
-                final label = _profileString(h, 'label', fallback: 'Campus');
+              children: interests.map((label) {
                 return Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
@@ -939,38 +986,438 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 );
               }).toList(),
             )
+          else if (isSelf)
+            Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(12),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _showEditInterestsSheet(
+                  context,
+                  currentInterests: interests,
+                ),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.inputFillColor(context),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: borderColor, width: 1),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.add_rounded,
+                          size: 16, color: AppTheme.primaryOrange),
+                      SizedBox(width: 6),
+                      Text(
+                        'Add interests',
+                        style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.primaryOrange),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            )
           else
-            GestureDetector(
-              onTap: () => _showAddHighlightSheet(context, highlights),
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.inputFillColor(context),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: borderColor, width: 1),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.add_rounded,
-                        size: 16, color: AppTheme.primaryOrange),
-                    SizedBox(width: 6),
-                    Text(
-                      'Add interests',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.primaryOrange),
-                    ),
-                  ],
-                ),
+            Text(
+              'No interests added yet',
+              style: TextStyle(
+                color: AppTheme.secondaryTextColor(context),
+                fontSize: 13,
+                fontStyle: FontStyle.italic,
               ),
             ),
         ],
       ),
     );
   }
+
+  void _showEditInterestsSheet(
+    BuildContext context, {
+    required List<String> currentInterests,
+  }) {
+    const defaultTopics = <String>[
+      'Tech',
+      'AI & ML',
+      'Startups',
+      'Coding',
+      'Engineering',
+      'Design',
+      'Campus',
+      'Events',
+      'Sports',
+      'Art',
+      'Science',
+      'New Tools',
+      'Product',
+      'Open Source',
+    ];
+
+    final customCtrl = TextEditingController();
+    final selectedInterests = Set<String>.from(currentInterests);
+    final availableTopics = List<String>.from(defaultTopics);
+    for (final interest in currentInterests) {
+      if (!availableTopics.contains(interest)) {
+        availableTopics.add(interest);
+      }
+    }
+
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final isDark = AppTheme.isDark(context);
+          final primaryText = AppTheme.primaryTextColor(context);
+          final secondaryText = AppTheme.secondaryTextColor(context);
+          final cardBg = AppTheme.cardColor(context);
+          final borderColor = AppTheme.cardBorderColor(context);
+
+          return Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+            ),
+            margin: const EdgeInsets.all(12),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              top: 16,
+              left: 20,
+              right: 20,
+            ),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: AppTheme.tertiaryTextColor(context),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: AppTheme.primaryOrange,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Edit Interests & Focus Areas',
+                      style: TextStyle(
+                        color: primaryText,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        fontFamily: 'Outfit',
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Select topics you care about or add custom focus areas.',
+                  style: TextStyle(
+                    color: secondaryText,
+                    fontSize: 13,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Flexible(
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: availableTopics.map((topic) {
+                            final isSelected =
+                                selectedInterests.contains(topic);
+                            return Material(
+                              color: Colors.transparent,
+                              borderRadius: BorderRadius.circular(12),
+                              child: InkWell(
+                                borderRadius: BorderRadius.circular(12),
+                                onTap: isSaving
+                                    ? null
+                                    : () {
+                                        setSheetState(() {
+                                          if (isSelected) {
+                                            selectedInterests.remove(topic);
+                                          } else {
+                                            selectedInterests.add(topic);
+                                          }
+                                        });
+                                      },
+                                child: AnimatedContainer(
+                                  duration:
+                                      const Duration(milliseconds: 180),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 8,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? AppTheme.primaryOrange
+                                        : AppTheme.surfaceMutedColor(context),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? AppTheme.primaryOrange
+                                          : borderColor,
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (isSelected) ...[
+                                        const Icon(
+                                          Icons.check_rounded,
+                                          size: 15,
+                                          color: Colors.white,
+                                        ),
+                                        const SizedBox(width: 5),
+                                      ],
+                                      Text(
+                                        topic,
+                                        style: TextStyle(
+                                          color: isSelected
+                                              ? Colors.white
+                                              : primaryText,
+                                          fontSize: 13,
+                                          fontWeight: isSelected
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                          fontFamily: 'Inter',
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextField(
+                                controller: customCtrl,
+                                enabled: !isSaving,
+                                style: TextStyle(
+                                  color: primaryText,
+                                  fontSize: 14,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: 'Add custom topic...',
+                                  hintStyle: TextStyle(
+                                    color: secondaryText,
+                                    fontSize: 13,
+                                  ),
+                                  isDense: true,
+                                  filled: true,
+                                  fillColor: AppTheme.inputFillColor(context),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 10,
+                                  ),
+                                ),
+                                onSubmitted: (val) {
+                                  final trimmed = val.trim();
+                                  if (trimmed.isNotEmpty) {
+                                    setSheetState(() {
+                                      if (!availableTopics.contains(trimmed)) {
+                                        availableTopics.add(trimmed);
+                                      }
+                                      selectedInterests.add(trimmed);
+                                      customCtrl.clear();
+                                    });
+                                  }
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filled(
+                              style: IconButton.styleFrom(
+                                backgroundColor: AppTheme.primaryOrange,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              icon: const Icon(Icons.add_rounded, size: 20),
+                              onPressed: isSaving
+                                  ? null
+                                  : () {
+                                      final trimmed = customCtrl.text.trim();
+                                      if (trimmed.isNotEmpty) {
+                                        setSheetState(() {
+                                          if (!availableTopics
+                                              .contains(trimmed)) {
+                                            availableTopics.add(trimmed);
+                                          }
+                                          selectedInterests.add(trimmed);
+                                          customCtrl.clear();
+                                        });
+                                      }
+                                    },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: isSaving
+                            ? null
+                            : () => Navigator.pop(sheetContext),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: primaryText,
+                          side: BorderSide(color: borderColor),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: const Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                final user = FirebaseAuth.instance.currentUser;
+                                if (user == null) {
+                                  Navigator.pop(sheetContext);
+                                  return;
+                                }
+
+                                setSheetState(() => isSaving = true);
+                                final updatedList = selectedInterests.toList();
+                                final updatedHighlights = updatedList
+                                    .map((item) => {
+                                          'label': item,
+                                          'color': '0xFFFF5A1F',
+                                        })
+                                    .toList();
+
+                                try {
+                                  await FirebaseFirestore.instance
+                                      .collection('users')
+                                      .doc(user.uid)
+                                      .set({
+                                    'interests': updatedList,
+                                    'highlights': updatedHighlights,
+                                  }, SetOptions(merge: true));
+
+                                  if (context.mounted) {
+                                    Navigator.pop(sheetContext);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Interests updated successfully'),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    setSheetState(() => isSaving = false);
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content:
+                                            Text(ErrorMapper.userMessage(e)),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryOrange,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Save',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontFamily: 'Inter',
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
 
   Widget _buildPostsGrid(
     BuildContext context,
@@ -1032,7 +1479,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        'Share your Connection Code with peers in CIE Chat to link accounts and share drops!',
+                        'Share your Connection Code with peers in Breakpoint Chat to link accounts and share drops!',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                             color: AppTheme.secondaryTextColor(context),
@@ -1284,6 +1731,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
+  // ignore: unused_element
   void _showAddHighlightSheet(
       BuildContext context, List<Map<String, dynamic>> currentHighlights) {
     final labelCtrl = TextEditingController();

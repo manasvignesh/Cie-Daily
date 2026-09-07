@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="cie_launch_background">#F6F6F4</color>
-    <color name="cie_orange">#FF5A1F</color>
+    <color name="cie_launch_background">#080B0C</color>
+    <color name="cie_orange">#FF6A1A</color>
 </resources>

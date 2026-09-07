@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/widgets/breakpoint_logo.dart';
 import '../../../core/theme/responsive.dart';
 import '../../profile/providers/profile_provider.dart';
 import '../../user/data/firebase_user_repository.dart';
@@ -249,15 +250,21 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Connect',
-                        style: TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w900,
-                          color: primaryText,
-                          fontFamily: 'Outfit',
-                          letterSpacing: -0.6,
-                        ),
+                      Row(
+                        children: [
+                          Text(
+                            'Connect',
+                            style: TextStyle(
+                              fontSize: 30,
+                              fontWeight: FontWeight.w900,
+                              color: primaryText,
+                              fontFamily: 'Outfit',
+                              letterSpacing: -0.6,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const BreakpointDotMarker(size: 8),
+                        ],
                       ),
                       const SizedBox(height: 4),
                       Text(

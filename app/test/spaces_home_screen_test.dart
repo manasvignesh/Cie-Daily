@@ -68,8 +68,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('Spaces'), findsOneWidget);
+    expect(find.text('NOT LIVE'), findsOneWidget);
     expect(find.text('A note from Manas'), findsOneWidget);
-    expect(find.textContaining('Review CIE Daily'), findsOneWidget);
+    expect(find.textContaining('Review Breakpoint'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

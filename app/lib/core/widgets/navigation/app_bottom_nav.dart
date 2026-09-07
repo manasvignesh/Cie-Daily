@@ -78,6 +78,7 @@ class AppBottomNav extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Stack(
+                          alignment: Alignment.center,
                           clipBehavior: Clip.none,
                           children: [
                             AnimatedSwitcher(
@@ -89,30 +90,29 @@ class AppBottomNav extends StatelessWidget {
                                 color: isSelected ? activeColor : inactiveColor,
                               ),
                             ),
-                            if (item.label == 'Spaces')
-                              Positioned(
-                                right: -7,
-                                top: -5,
-                                child: Icon(
-                                  Icons.lock_rounded,
-                                  size: 10,
-                                  color:
-                                      isSelected ? activeColor : inactiveColor,
-                                ),
-                              ),
                           ],
                         ),
                         const SizedBox(height: 4),
-                        Text(
-                          item.label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight:
-                                isSelected ? FontWeight.w700 : FontWeight.w500,
-                            color: isSelected ? activeColor : inactiveColor,
-                            fontFamily: 'Inter',
+                        // Breakpoint Marker Dot for Active Tab
+                        if (isSelected)
+                          Container(
+                            width: 4,
+                            height: 4,
+                            decoration: const BoxDecoration(
+                              color: activeColor,
+                              shape: BoxShape.circle,
+                            ),
+                          )
+                        else
+                          Text(
+                            item.label,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: inactiveColor,
+                              fontFamily: 'Inter',
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),

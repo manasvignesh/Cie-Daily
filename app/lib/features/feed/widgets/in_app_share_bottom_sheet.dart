@@ -100,7 +100,7 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
                       ),
                     ),
                     const Text(
-                      'Only with your CIE Connect connections',
+                      'Only with your Breakpoint connections',
                       style: TextStyle(
                         color: Colors.white54,
                         fontSize: 12,
@@ -246,7 +246,7 @@ class _InAppShareBottomSheetState extends ConsumerState<InAppShareBottomSheet> {
                         const SizedBox(height: 12),
                         Text(
                           conversations.isEmpty
-                              ? 'No connected friends yet.\nConnect with peers in CIE Chat to share!'
+                              ? 'No connected friends yet.\nConnect with peers in Breakpoint Chat to share!'
                               : 'No connection matching "$_searchQuery"',
                           textAlign: TextAlign.center,
                           style: const TextStyle(

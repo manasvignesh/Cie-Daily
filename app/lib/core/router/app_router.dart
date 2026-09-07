@@ -11,6 +11,7 @@ import '../../features/feed/screens/home_screen.dart';
 import '../../features/feed/screens/create_video_post_screen.dart';
 import '../../features/feed/screens/create_article_post_screen.dart';
 import '../../features/spaces/screens/spaces_home_screen.dart';
+import '../../features/spaces/screens/active_space_screen.dart';
 import '../../features/feed/screens/single_reel_screen.dart';
 import '../../features/discover/screens/discover_screen.dart';
 import '../../features/discover/screens/article_detail_screen.dart';
@@ -163,7 +164,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/spaces/:spaceId',
         parentNavigatorKey: _rootNavigatorKey,
-        redirect: (context, state) => '/spaces',
+        builder: (context, state) {
+          final spaceId = state.pathParameters['spaceId']!;
+          final roomName = state.extra as String?;
+          return ActiveSpaceScreen(spaceId: spaceId, roomName: roomName);
+        },
       ),
       GoRoute(
         path: '/article/:id',

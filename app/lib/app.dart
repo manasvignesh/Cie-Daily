@@ -64,7 +64,7 @@ class _CIEConnectAppState extends ConsumerState<CIEConnectApp>
     }
 
     return MaterialApp.router(
-      title: 'CIE Connect',
+      title: 'Breakpoint',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,

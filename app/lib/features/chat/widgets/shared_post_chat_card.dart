@@ -334,7 +334,7 @@ class _SharedPostChatCardState extends State<SharedPostChatCard> {
                       color: AppTheme.secondaryTextColor(context), size: 12),
                   const SizedBox(width: 4),
                   Text(
-                    'Tap to view in CIE Connect',
+                    'Tap to view in Breakpoint',
                     style: TextStyle(
                         color: AppTheme.secondaryTextColor(context),
                         fontSize: 10,
