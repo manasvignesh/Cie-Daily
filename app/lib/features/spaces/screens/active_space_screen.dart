@@ -49,7 +49,7 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
     _listener = _room.createListener();
 
     _listener.on<RoomEvent>((event) {
-      if (mounted) setState(() {});
+      if (!mounted) return;
       if (event is ParticipantConnectedEvent) {
         developer.log(
           'REMOTE_PARTICIPANTS=${_room.remoteParticipants.length} identity=${event.participant.identity}',
@@ -72,16 +72,21 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
           _pinnedParticipant?.identity == event.participant.identity) {
         setState(() => _pinnedParticipant = null);
       }
+      if (mounted && event is! RoomDisconnectedEvent) {
+        setState(() {});
+      }
     });
 
     _listener.on<RoomDisconnectedEvent>((event) {
-      if (mounted) {
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !context.mounted) return;
         if (GoRouter.of(context).canPop()) {
           GoRouter.of(context).pop();
         } else {
           GoRouter.of(context).go('/spaces');
         }
-      }
+      });
     });
 
     _connect();
@@ -412,11 +417,13 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
           Positioned.fill(
             child: _pinnedParticipant != null
                 ? _VideoRenderer(
+                    key: ValueKey('pinned_${_pinnedParticipant!.identity}'),
                     participant: _pinnedParticipant!,
                     onTap: () => setState(() => _showControls = !_showControls),
                   )
                 : (participants.isNotEmpty
                     ? _VideoRenderer(
+                        key: ValueKey('main_${participants.first.identity}'),
                         participant: participants.first,
                         onTap: () =>
                             setState(() => _showControls = !_showControls),
@@ -444,11 +451,15 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                   final p = participants[index];
                   if (p == _pinnedParticipant) return const SizedBox();
                   return GestureDetector(
+                    key: ValueKey('thumb_${p.identity}'),
                     onTap: () => setState(() => _pinnedParticipant = p),
                     child: Container(
                       width: 110,
                       margin: const EdgeInsets.only(right: 10),
-                      child: _ThumbnailWidget(participant: p),
+                      child: _ThumbnailWidget(
+                        key: ValueKey('thumb_widget_${p.identity}'),
+                        participant: p,
+                      ),
                     ),
                   );
                 },
@@ -600,12 +611,16 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                 Positioned.fill(
                   child: _pinnedParticipant != null
                       ? _VideoRenderer(
+                          key: ValueKey(
+                              'land_pinned_${_pinnedParticipant!.identity}'),
                           participant: _pinnedParticipant!,
                           onTap: () =>
                               setState(() => _showControls = !_showControls),
                         )
                       : (participants.isNotEmpty
                           ? _VideoRenderer(
+                              key: ValueKey(
+                                  'land_main_${participants.first.identity}'),
                               participant: participants.first,
                               onTap: () => setState(
                                   () => _showControls = !_showControls),
@@ -626,12 +641,17 @@ class _ActiveSpaceScreenState extends ConsumerState<ActiveSpaceScreen> {
                           .where((p) => p != _pinnedParticipant)
                           .take(4)
                           .map((p) => GestureDetector(
+                                key: ValueKey('land_thumb_${p.identity}'),
                                 onTap: () =>
                                     setState(() => _pinnedParticipant = p),
                                 child: Container(
                                   width: 80,
                                   margin: const EdgeInsets.only(right: 6),
-                                  child: _ThumbnailWidget(participant: p),
+                                  child: _ThumbnailWidget(
+                                    key: ValueKey(
+                                        'land_thumb_widget_${p.identity}'),
+                                    participant: p,
+                                  ),
                                 ),
                               ))
                           .toList(),
@@ -1020,14 +1040,18 @@ class _VideoRenderer extends StatefulWidget {
   final Participant participant;
   final VoidCallback? onTap;
 
-  const _VideoRenderer({required this.participant, this.onTap});
+  const _VideoRenderer({
+    super.key,
+    required this.participant,
+    this.onTap,
+  });
 
   @override
   State<_VideoRenderer> createState() => _VideoRendererState();
 }
 
 class _VideoRendererState extends State<_VideoRenderer> {
-  late EventsListener<ParticipantEvent> _listener;
+  EventsListener<ParticipantEvent>? _listener;
 
   @override
   void initState() {
@@ -1036,8 +1060,9 @@ class _VideoRendererState extends State<_VideoRenderer> {
   }
 
   void _listenToParticipant() {
+    _listener?.dispose();
     _listener = widget.participant.createListener();
-    _listener.on<ParticipantEvent>((event) {
+    _listener?.on<ParticipantEvent>((event) {
       if (mounted) setState(() {});
     });
   }
@@ -1046,14 +1071,14 @@ class _VideoRendererState extends State<_VideoRenderer> {
   void didUpdateWidget(covariant _VideoRenderer oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.participant != widget.participant) {
-      _listener.dispose();
       _listenToParticipant();
     }
   }
 
   @override
   void dispose() {
-    _listener.dispose();
+    _listener?.dispose();
+    _listener = null;
     super.dispose();
   }
 
@@ -1076,6 +1101,7 @@ class _VideoRendererState extends State<_VideoRenderer> {
           child: videoTrack != null
               ? VideoTrackRenderer(
                   videoTrack,
+                  key: ValueKey(videoTrack.sid ?? videoTrack.hashCode),
                   fit: RTCVideoViewObjectFit.RTCVideoViewObjectFitContain,
                 )
               : Center(
@@ -1139,27 +1165,44 @@ class _VideoRendererState extends State<_VideoRenderer> {
 class _ThumbnailWidget extends StatefulWidget {
   final Participant participant;
 
-  const _ThumbnailWidget({required this.participant});
+  const _ThumbnailWidget({
+    super.key,
+    required this.participant,
+  });
 
   @override
   State<_ThumbnailWidget> createState() => _ThumbnailWidgetState();
 }
 
 class _ThumbnailWidgetState extends State<_ThumbnailWidget> {
-  late final EventsListener<ParticipantEvent> _listener;
+  EventsListener<ParticipantEvent>? _listener;
 
   @override
   void initState() {
     super.initState();
+    _listenToParticipant();
+  }
+
+  void _listenToParticipant() {
+    _listener?.dispose();
     _listener = widget.participant.createListener();
-    _listener.on<ParticipantEvent>((event) {
+    _listener?.on<ParticipantEvent>((event) {
       if (mounted) setState(() {});
     });
   }
 
   @override
+  void didUpdateWidget(covariant _ThumbnailWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.participant != widget.participant) {
+      _listenToParticipant();
+    }
+  }
+
+  @override
   void dispose() {
-    _listener.dispose();
+    _listener?.dispose();
+    _listener = null;
     super.dispose();
   }
 
@@ -1200,7 +1243,10 @@ class _ThumbnailWidgetState extends State<_ThumbnailWidget> {
             fit: StackFit.expand,
             children: [
               if (videoTrack != null)
-                VideoTrackRenderer(videoTrack)
+                VideoTrackRenderer(
+                  videoTrack,
+                  key: ValueKey(videoTrack.sid ?? videoTrack.hashCode),
+                )
               else
                 Center(
                   child: Text(

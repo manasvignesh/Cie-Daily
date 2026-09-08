@@ -5,15 +5,15 @@
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:statusBarColor">@color/cie_launch_background</item>
         <item name="android:navigationBarColor">@color/cie_launch_background</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
     <!-- Theme applied to the Android Window as soon as the process has started -->
     <style name="NormalTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/cie_launch_background</item>
         <item name="android:statusBarColor">@color/cie_launch_background</item>
         <item name="android:navigationBarColor">@color/cie_launch_background</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

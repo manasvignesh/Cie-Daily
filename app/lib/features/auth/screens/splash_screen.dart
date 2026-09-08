@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,17 +8,18 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 
-const _splashBackground = AppTheme.darkBackground; // Ink Black #080B0C
-const _signalOrange = AppTheme.primaryOrange; // Signal Orange #FF6A1A
-const _boneWhite = AppTheme.darkPrimaryText; // Bone White #EDE9E0
-const _mutedGray = Color(0xFF8E8E93);
+const _ink = AppTheme.darkBackground;
+const _orange = AppTheme.primaryOrange;
+const _warmWhite = AppTheme.darkPrimaryText;
+const _muted = Color(0xFF96938D);
 
-const _splashOverlayStyle = SystemUiOverlayStyle(
+const _overlayStyle = SystemUiOverlayStyle(
   statusBarColor: Colors.transparent,
   statusBarIconBrightness: Brightness.light,
   statusBarBrightness: Brightness.dark,
-  systemNavigationBarColor: _splashBackground,
+  systemNavigationBarColor: _ink,
   systemNavigationBarIconBrightness: Brightness.light,
+  systemNavigationBarDividerColor: _ink,
 );
 
 class SplashScreen extends ConsumerStatefulWidget {
@@ -28,15 +31,12 @@ class SplashScreen extends ConsumerStatefulWidget {
 
 class _SplashScreenState extends ConsumerState<SplashScreen>
     with TickerProviderStateMixin {
-  static const _totalSplashDuration = Duration(milliseconds: 3400);
-
-  late final AnimationController _animController;
-  late final AnimationController _exitController;
-
+  late final AnimationController _reveal;
+  late final AnimationController _exit;
   ProviderSubscription<AuthStatus>? _authSubscription;
   late AuthStatus _authStatus;
-  bool _animationStarted = false;
-  bool _animFinished = false;
+  bool _started = false;
+  bool _revealFinished = false;
   bool _exitStarted = false;
 
   @override
@@ -46,40 +46,37 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     _authSubscription = ref.listenManual<AuthStatus>(
       authControllerProvider,
       (_, next) {
-        if (!mounted) return;
-        setState(() => _authStatus = next);
-        _beginExitIfReady();
+        _authStatus = next;
+        _exitWhenReady();
       },
     );
-
-    _animController = AnimationController(
+    _reveal = AnimationController(
       vsync: this,
-      duration: _totalSplashDuration,
+      duration: const Duration(milliseconds: 2500),
     )..addStatusListener((status) {
         if (status == AnimationStatus.completed) {
-          _animFinished = true;
-          _beginExitIfReady();
+          _revealFinished = true;
+          _exitWhenReady();
         }
       });
-
-    _exitController = AnimationController(
+    _exit = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 400),
     )..addStatusListener((status) {
-        if (status == AnimationStatus.completed) _navigateToDestination();
+        if (status == AnimationStatus.completed) _navigate();
       });
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_animationStarted) return;
-    _animationStarted = true;
+    if (_started) return;
+    _started = true;
     if (MediaQuery.disableAnimationsOf(context)) {
-      _animController.duration = const Duration(milliseconds: 350);
-      _exitController.duration = const Duration(milliseconds: 180);
+      _reveal.duration = const Duration(milliseconds: 300);
+      _exit.duration = const Duration(milliseconds: 150);
     }
-    _animController.forward();
+    _reveal.forward();
   }
 
   String? get _destination => switch (_authStatus) {
@@ -90,248 +87,163 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         AuthStatus.initial || AuthStatus.error => null,
       };
 
-  void _beginExitIfReady() {
-    if (!mounted || !_animFinished || _exitStarted || _destination == null) {
+  void _exitWhenReady() {
+    if (!mounted || !_revealFinished || _exitStarted || _destination == null) {
       return;
     }
     _exitStarted = true;
-    _exitController.forward();
+    _exit.forward();
   }
 
-  void _navigateToDestination() {
-    final route = _destination;
-    if (!mounted || route == null) return;
-    context.go(route);
+  void _navigate() {
+    final destination = _destination;
+    if (mounted && destination != null) context.go(destination);
+  }
+
+  double _phase(double start, double end, Curve curve) {
+    final value = ((_reveal.value - start) / (end - start)).clamp(0.0, 1.0);
+    return curve.transform(value).clamp(0.0, 1.0);
   }
 
   @override
   void dispose() {
     _authSubscription?.close();
-    _animController.dispose();
-    _exitController.dispose();
+    _reveal.dispose();
+    _exit.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: _splashOverlayStyle,
+      value: _overlayStyle,
       child: Scaffold(
-        backgroundColor: _splashBackground,
+        backgroundColor: _ink,
         body: RepaintBoundary(
           child: AnimatedBuilder(
-            animation: Listenable.merge([_animController, _exitController]),
+            animation: Listenable.merge([_reveal, _exit]),
             builder: (context, _) {
-              final exitVal = _exitController.value;
+              final entrance = _phase(0.00, 0.38, Curves.easeOutBack);
+              final auraExpand = _phase(0.15, 0.50, Curves.easeOutCubic);
+              final shimmer = _phase(0.32, 0.68, Curves.easeInOutCubic);
+              final textFade = _phase(0.46, 0.76, Curves.easeOutCubic);
+              final idleBreath = _phase(0.70, 1.00, Curves.easeInOut);
+              final exit = Curves.easeInOutCubic.transform(_exit.value);
 
-              // ── PHASE 1: Signal Orange dot appears (0.00 to 0.14 / ~0.5s)
-              final dotOpacity = CurvedAnimation(
-                parent: _animController,
-                curve: const Interval(0.00, 0.12, curve: Curves.easeOut),
-              ).value;
-              final dotScale = CurvedAnimation(
-                parent: _animController,
-                curve: const Interval(0.00, 0.14, curve: Curves.easeOutCubic),
-              ).value;
+              final floatY = idleBreath > 0
+                  ? math.sin(idleBreath * 2 * math.pi) * 3.0
+                  : 0.0;
 
-              // ── PHASE 2: Execution line travels & stops instantly at dot (0.14 to 0.31 / ~1.1s)
-              final lineProgress = CurvedAnimation(
-                parent: _animController,
-                curve: const Interval(0.14, 0.31, curve: Curves.easeOutCubic),
-              ).value;
-
-              // Micro impact pulse on dot when line stops (0.31 to 0.38)
-              final impactPulse = CurvedAnimation(
-                parent: _animController,
-                curve: const Interval(0.31, 0.38, curve: Curves.elasticOut),
-              ).value;
-
-              // ── PHASE 3: Wordmark BREAKP & INT resolve around fixed dot (0.31 to 0.57 / ~2.0s)
-              final textOpacity = CurvedAnimation(
-                parent: _animController,
-                curve: const Interval(0.31, 0.57, curve: Curves.easeOutCubic),
-              ).value;
-              final textSlide = (1.0 - textOpacity) * 14.0;
-
-              // ── PHASE 4: Founder lockup "By MANAS" fades in (0.57 to 0.71 / ~2.5s)
-              final lockupOpacity = CurvedAnimation(
-                parent: _animController,
-                curve: const Interval(0.57, 0.71, curve: Curves.easeOutCubic),
-              ).value;
-              final lockupTranslateY = (1.0 - lockupOpacity) * 6.0;
-
-              // ── PHASE 5: Tagline "Worth stopping for." plain text (0.71 to 0.85 / ~3.0s)
-              final taglineOpacity = CurvedAnimation(
-                parent: _animController,
-                curve: const Interval(0.71, 0.85, curve: Curves.easeOutCubic),
-              ).value;
-              final taglineTranslateY = (1.0 - taglineOpacity) * 4.0;
-
-              // ── PHASE 6: Transition into app (0.85 to 1.0 + ExitController / 3.0s - 3.6s)
-              // Text elements fade out while the Signal Orange dot remains visible into app launch
-              final textExitOpacity = (1.0 - exitVal).clamp(0.0, 1.0);
-              final dotExitScale = 1.0 + (exitVal * 0.15);
-              final dotExitOpacity = (1.0 - (exitVal * 0.4)).clamp(0.0, 1.0);
-
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(bottom: 40.0), // Slightly higher position for balance
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // ── MAIN ANIMATION SURFACE: LINE + BREAKP●INT ─────────────────
-                      SizedBox(
-                        height: 70,
-                        child: Stack(
-                          alignment: Alignment.center,
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  CustomPaint(
+                    painter: _AtmospherePainter(
+                      expand: auraExpand,
+                      shimmer: shimmer,
+                      idle: idleBreath,
+                    ),
+                  ),
+                  Center(
+                    child: Transform.translate(
+                      offset: Offset(0, -16 + floatY - exit * 16),
+                      child: Opacity(
+                        opacity: (1 - exit).clamp(0.0, 1.0),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            // Horizontal Execution Line (Stops instantly at dot)
-                            if (lineProgress > 0 && textOpacity < 0.9)
-                              Positioned(
-                                left: 0,
-                                right: 0,
-                                child: _LineTravelPainterWidget(
-                                  progress: lineProgress,
-                                  lineColor: _boneWhite.withValues(
-                                      alpha: 0.85 * (1.0 - (textOpacity * 0.8))),
+                            Transform.scale(
+                              scale: (0.75 + entrance * 0.25) * (1 + exit * 0.06),
+                              child: Opacity(
+                                opacity: entrance.clamp(0.0, 1.0),
+                                child: _OriginalLogoCard(shimmerProgress: shimmer),
+                              ),
+                            ),
+                            const SizedBox(height: 28),
+                            Transform.translate(
+                              offset: Offset(0, (1 - textFade) * 12),
+                              child: Opacity(
+                                opacity: textFade.clamp(0.0, 1.0),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: BoxDecoration(
+                                            color: _orange,
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: _orange.withValues(alpha: 0.7),
+                                                blurRadius: 8,
+                                                spreadRadius: 1,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        const Text(
+                                          'BY MANAS',
+                                          style: TextStyle(
+                                            color: _muted,
+                                            fontFamily: 'Inter',
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: 3.5,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: BoxDecoration(
+                                            color: _orange,
+                                            shape: BoxShape.circle,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: _orange.withValues(alpha: 0.7),
+                                                blurRadius: 8,
+                                                spreadRadius: 1,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 12),
+                                    const Text(
+                                      'Worth stopping for.',
+                                      style: TextStyle(
+                                        color: _warmWhite,
+                                        fontFamily: 'Inter',
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w400,
+                                        letterSpacing: 0.4,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
-
-                            // BREAKP ● INT Brand Lockup
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // BREAKP
-                                Transform.translate(
-                                  offset: Offset(-textSlide, 0),
-                                  child: Opacity(
-                                    opacity: textOpacity * textExitOpacity,
-                                    child: const Text(
-                                      'BREAKP',
-                                      style: TextStyle(
-                                        fontSize: 32,
-                                        fontWeight: FontWeight.w900,
-                                        color: _boneWhite,
-                                        letterSpacing: 2.2,
-                                        fontFamily: 'Outfit',
-                                        height: 1.0,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 1),
-
-                                // Signal Orange Breakpoint Dot (Anchor)
-                                Transform.scale(
-                                  scale: (0.6 + (0.4 * dotScale) + (impactPulse * 0.12)) * dotExitScale,
-                                  child: Opacity(
-                                    opacity: dotOpacity * dotExitOpacity,
-                                    child: Container(
-                                      width: 18,
-                                      height: 18,
-                                      margin: const EdgeInsets.symmetric(horizontal: 3),
-                                      decoration: BoxDecoration(
-                                        color: _signalOrange,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: _signalOrange.withValues(
-                                                alpha: 0.45 + (0.25 * impactPulse)),
-                                            blurRadius: 12 + (8 * impactPulse),
-                                            spreadRadius: 1 + (2 * impactPulse),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-
-                                const SizedBox(width: 1),
-
-                                // INT
-                                Transform.translate(
-                                  offset: Offset(textSlide, 0),
-                                  child: Opacity(
-                                    opacity: textOpacity * textExitOpacity,
-                                    child: const Text(
-                                      'INT',
-                                      style: TextStyle(
-                                        fontSize: 32,
-                                        fontWeight: FontWeight.w900,
-                                        color: _boneWhite,
-                                        letterSpacing: 2.2,
-                                        fontFamily: 'Outfit',
-                                        height: 1.0,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
                             ),
                           ],
                         ),
                       ),
-
-                      const SizedBox(height: 6),
-
-                      // ── FOUNDER LOCKUP: By MANAS ──────────────────────────────────
-                      Transform.translate(
-                        offset: Offset(0, lockupTranslateY),
-                        child: Opacity(
-                          opacity: lockupOpacity * textExitOpacity,
-                          child: RichText(
-                            text: const TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: 'By ',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: _mutedGray,
-                                    letterSpacing: 2.0,
-                                    fontFamily: 'Inter',
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: 'MANAS',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: _boneWhite,
-                                    letterSpacing: 3.0,
-                                    fontFamily: 'Inter',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-
-                      const SizedBox(height: 14),
-
-                      // ── TAGLINE: Worth stopping for. (Plain Text Only) ────────────
-                      Transform.translate(
-                        offset: Offset(0, taglineTranslateY),
-                        child: Opacity(
-                          opacity: taglineOpacity * textExitOpacity,
-                          child: const Text(
-                            'Worth stopping for.',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w400,
-                              fontStyle: FontStyle.italic,
-                              color: _mutedGray,
-                              letterSpacing: 0.6,
-                              fontFamily: 'Inter',
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                  if (exit > 0)
+                    IgnorePointer(
+                      child: Opacity(
+                        opacity: math.sin(exit * math.pi) * 0.35,
+                        child: ColoredBox(
+                          color: _orange.withValues(alpha: 0.2),
+                        ),
+                      ),
+                    ),
+                ],
               );
             },
           ),
@@ -341,55 +253,161 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   }
 }
 
-class _LineTravelPainterWidget extends StatelessWidget {
-  final double progress;
-  final Color lineColor;
+class _OriginalLogoCard extends StatelessWidget {
+  final double shimmerProgress;
 
-  const _LineTravelPainterWidget({
-    required this.progress,
-    required this.lineColor,
-  });
+  const _OriginalLogoCard({required this.shimmerProgress});
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: const Size(double.infinity, 2),
-      painter: _LineTravelPainter(
-        progress: progress,
-        lineColor: lineColor,
+    const double cardSize = 124.0;
+    const double borderRadius = 28.0;
+
+    return Container(
+      width: cardSize,
+      height: cardSize,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFAF8F5),
+        borderRadius: BorderRadius.circular(borderRadius),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.2),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: _orange.withValues(alpha: 0.32),
+            blurRadius: 36,
+            spreadRadius: 2,
+            offset: const Offset(0, 8),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.65),
+            blurRadius: 24,
+            offset: const Offset(0, 12),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(borderRadius - 1.5),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(10.0),
+              child: Image.asset(
+                'assets/icons/app_logo.png',
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => Image.asset(
+                  'app/assets/icons/app_logo.png',
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Center(
+                    child: Icon(
+                      Icons.auto_awesome,
+                      size: 48,
+                      color: _orange,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (shimmerProgress > 0 && shimmerProgress < 1)
+              CustomPaint(
+                painter: _GleamSweepPainter(progress: shimmerProgress),
+              ),
+          ],
+        ),
       ),
     );
   }
 }
 
-class _LineTravelPainter extends CustomPainter {
+class _GleamSweepPainter extends CustomPainter {
   final double progress;
-  final Color lineColor;
 
-  _LineTravelPainter({required this.progress, required this.lineColor});
+  const _GleamSweepPainter({required this.progress});
 
   @override
   void paint(Canvas canvas, Size size) {
+    final double travel = size.width * 2.2;
+    final double startX = -size.width * 0.6 + progress * travel;
+
     final paint = Paint()
-      ..color = lineColor
-      ..strokeWidth = 1.5
-      ..style = PaintingStyle.stroke;
+      ..shader = LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Colors.white.withValues(alpha: 0.0),
+          Colors.white.withValues(alpha: 0.35),
+          Colors.white.withValues(alpha: 0.65),
+          Colors.white.withValues(alpha: 0.35),
+          Colors.white.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.35, 0.50, 0.65, 1.0],
+      ).createShader(
+        Rect.fromLTWH(startX, -size.height * 0.3, size.width * 0.8, size.height * 1.6),
+      )
+      ..blendMode = BlendMode.srcATop;
 
-    final centerX = size.width / 2;
-    // Line travels from left edge of screen and STOPS INSTANTLY at the orange dot center (centerX)
-    final startX = (centerX - 180) + ((180) * progress);
-    final endX = centerX - 10;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
+  }
 
-    if (startX < endX) {
-      canvas.drawLine(
-        Offset(startX, size.height / 2),
-        Offset(endX, size.height / 2),
-        paint,
+  @override
+  bool shouldRepaint(covariant _GleamSweepPainter oldDelegate) =>
+      oldDelegate.progress != progress;
+}
+
+class _AtmospherePainter extends CustomPainter {
+  final double expand;
+  final double shimmer;
+  final double idle;
+
+  const _AtmospherePainter({
+    required this.expand,
+    required this.shimmer,
+    required this.idle,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2 - 16);
+    final baseRadius = size.width * 0.65;
+    final dynamicRadius = baseRadius * (0.8 + expand * 0.2 + math.sin(idle * 2 * math.pi) * 0.03);
+
+    final glow = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          _orange.withValues(alpha: 0.18 + expand * 0.06),
+          _orange.withValues(alpha: 0.05),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.45, 1.0],
+      ).createShader(
+        Rect.fromCircle(center: center, radius: dynamicRadius),
       );
+
+    canvas.drawCircle(center, dynamicRadius, glow);
+
+    if (expand > 0.3) {
+      final ringAlpha = ((expand - 0.3) / 0.7).clamp(0.0, 1.0);
+      final ringPaint = Paint()
+        ..color = _orange.withValues(alpha: ringAlpha * 0.12)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+
+      canvas.drawCircle(center, 92 + expand * 18, ringPaint);
+
+      final outerRingPaint = Paint()
+        ..color = Colors.white.withValues(alpha: ringAlpha * 0.04)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+
+      canvas.drawCircle(center, 138 + expand * 26, outerRingPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant _LineTravelPainter oldDelegate) =>
-      oldDelegate.progress != progress;
+  bool shouldRepaint(covariant _AtmospherePainter oldDelegate) =>
+      oldDelegate.expand != expand ||
+      oldDelegate.shimmer != shimmer ||
+      oldDelegate.idle != idle;
 }
