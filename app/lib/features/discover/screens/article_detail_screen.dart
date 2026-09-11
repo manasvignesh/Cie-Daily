@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/language_provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -11,8 +12,8 @@ import '../../feed/widgets/in_app_share_bottom_sheet.dart';
 import '../../user/data/firebase_user_repository.dart';
 import '../models/structured_article_model.dart';
 import '../providers/discover_provider.dart';
-import '../services/article_narration_service.dart';
 import '../widgets/article_components.dart';
+import '../widgets/language_picker_sheet.dart';
 
 class ArticleDetailScreen extends ConsumerStatefulWidget {
   final String? articleId;
@@ -40,12 +41,6 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
     if (widget.initialArticle != null) {
       _isSaved = widget.initialArticle!.isBookmarkedByCurrentUser;
     }
-  }
-
-  @override
-  void dispose() {
-    ref.read(articleNarrationProvider.notifier).stop();
-    super.dispose();
   }
 
   Future<void> _toggleSaved(PostModel article) async {
@@ -105,7 +100,9 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
   }
 
   Widget _buildArticleContent(BuildContext context, PostModel articlePost) {
-    final structuredData = StructuredArticleData.fromPostModel(articlePost);
+    final selectedLanguage = ref.watch(contentLanguageProvider);
+    final structuredData =
+        StructuredArticleData.fromPostModel(articlePost, language: selectedLanguage);
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final isSelf = currentUserId != null &&
         structuredData.authorId != null &&
@@ -116,6 +113,11 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
 
     final primaryText = AppTheme.primaryTextColor(context);
     final isSaved = _isSaved ?? articlePost.isBookmarkedByCurrentUser;
+    
+    final availableLanguages = ['en'];
+    articlePost.publishedArticle.languages.forEach((k, v) {
+      if (k != 'en' && v.translationStatus == 'ready') availableLanguages.add(k);
+    });
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor(context),
@@ -211,6 +213,16 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (availableLanguages.length > 1)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: LanguagePickerButton(
+                            availableLanguageIds: availableLanguages,
+                          ),
+                        ),
+                      ),
                     // 1. HERO SECTION
                     ArticleHeroSection(
                       article: structuredData,
@@ -372,3 +384,4 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
     );
   }
 }
+

@@ -185,12 +185,43 @@ class QuoteContent {
   }
 }
 
+class LocalizedArticleContent {
+  final String title;
+  final QuickBriefContent quickBrief;
+  final FullArticleContent fullArticle;
+  final String? audioUrl;
+  final String translationStatus;
+  final String audioStatus;
+
+  const LocalizedArticleContent({
+    required this.title,
+    required this.quickBrief,
+    required this.fullArticle,
+    this.audioUrl,
+    required this.translationStatus,
+    required this.audioStatus,
+  });
+
+  factory LocalizedArticleContent.fromMap(Map<String, dynamic> map) {
+    final audio = _string(map['audioUrl'] ?? map['audio_url']);
+    return LocalizedArticleContent(
+      title: _string(map['title']),
+      quickBrief: QuickBriefContent.fromMap(_map(map['quick_brief'] ?? map['quickBrief'] ?? {})),
+      fullArticle: FullArticleContent.fromMap(_map(map['full_article'] ?? map['fullArticle'] ?? {})),
+      audioUrl: audio.isEmpty ? null : audio,
+      translationStatus: _string(map['translationStatus'] ?? map['translation_status']),
+      audioStatus: _string(map['audioStatus'] ?? map['audio_status']),
+    );
+  }
+}
+
 class PublishedArticle {
   final String id;
   final int schemaVersion;
   final QuickBriefContent? quickBrief;
   final FullArticleContent? fullArticle;
   final Map<String, dynamic> metadata;
+  final Map<String, LocalizedArticleContent> languages;
 
   const PublishedArticle({
     required this.id,
@@ -198,6 +229,7 @@ class PublishedArticle {
     required this.quickBrief,
     required this.fullArticle,
     required this.metadata,
+    this.languages = const {},
   });
 
   factory PublishedArticle.fromFirestore(
@@ -217,6 +249,9 @@ class PublishedArticle {
       metadata: data['metadata'] is Map
           ? _map(data['metadata'] as Map)
           : const <String, dynamic>{},
+      languages: data['languages'] is Map
+          ? (_map(data['languages'] as Map).map((k, v) => MapEntry(k, LocalizedArticleContent.fromMap(_map(v)))))
+          : const <String, LocalizedArticleContent>{},
     );
     if (schemaVersion >= 2) {
       if (article.quickBrief == null) {

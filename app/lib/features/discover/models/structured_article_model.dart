@@ -42,6 +42,9 @@ class StructuredArticleData {
   final String? quoteSpeaker;
   final String? quoteRole;
   final List<String> takeaways;
+  final String? audioUrl;
+  final String audioStatus;
+  final String contentLanguage;
 
   const StructuredArticleData({
     required this.id,
@@ -62,6 +65,9 @@ class StructuredArticleData {
     this.quoteSpeaker,
     this.quoteRole,
     required this.takeaways,
+    this.audioUrl,
+    this.audioStatus = 'unavailable',
+    this.contentLanguage = 'en',
   });
 
   /// Reference Implementation: Matel Motion EV Powertrains story
@@ -154,9 +160,19 @@ class StructuredArticleData {
   }
 
   /// Synthesizes a structured article from any generic PostModel
-  factory StructuredArticleData.fromPostModel(PostModel post) {
+  factory StructuredArticleData.fromPostModel(PostModel post, {String language = 'en'}) {
     if (post.schemaVersion >= 2) {
-      final full = post.fullArticle;
+      final loc = post.publishedArticle.languages[language];
+      final isLoc = loc != null && loc.translationStatus == 'ready';
+      final qb = isLoc ? loc.quickBrief : post.quickBrief;
+      final full = isLoc ? loc.fullArticle : post.fullArticle;
+      
+      // Fallback audio to English if selected language audio is not ready or missing
+      final effectiveLoc = isLoc ? loc : post.publishedArticle.languages['en'];
+      final audioStatus = effectiveLoc?.audioStatus ?? 'unavailable';
+      final audioUrl = audioStatus == 'ready' ? effectiveLoc?.audioUrl : null;
+      final effectiveLanguage = isLoc ? language : 'en';
+
       if (full == null) {
         debugPrint(
           'ARTICLE_RENDER_ERROR [${post.id}]: full_article missing for schema v${post.schemaVersion}',
@@ -164,21 +180,24 @@ class StructuredArticleData {
         return StructuredArticleData(
           id: post.id,
           category: categoryForPost(post),
-          headline: post.quickBrief?.headline.isNotEmpty == true
-              ? post.quickBrief!.headline
-              : post.title,
-          hook: post.quickBrief?.quickSummary ?? '',
+          headline: qb?.headline.isNotEmpty == true
+              ? qb!.headline
+              : (isLoc ? loc.title : post.title),
+          hook: qb?.quickSummary ?? '',
           heroImage: post.imageUrl,
           authorName: post.authorName,
           authorAvatar: post.authorAvatar,
           authorId: post.authorId,
           isAuthorVerified: post.isAuthorVerified,
           readTime: post.estimatedReadTime,
-          in20SecondsSummary: post.quickBrief?.quickSummary ?? '',
+          in20SecondsSummary: qb?.quickSummary ?? '',
           keyNumbers: const [],
-          whyItMatters: post.quickBrief?.quickSummary ?? '',
+          whyItMatters: qb?.quickSummary ?? '',
           exploreSections: const [],
           takeaways: const [],
+          audioUrl: audioUrl,
+          audioStatus: audioStatus,
+          contentLanguage: effectiveLanguage,
         );
       }
 
@@ -187,10 +206,10 @@ class StructuredArticleData {
         category: categoryForPost(post),
         headline: full.headline.isNotEmpty
             ? full.headline
-            : (post.quickBrief?.headline ?? post.title),
+            : (qb?.headline ?? (isLoc ? loc.title : post.title)),
         hook: full.hook.isNotEmpty
             ? full.hook
-            : (post.quickBrief?.quickSummary ?? ''),
+            : (qb?.quickSummary ?? ''),
         heroImage: post.imageUrl,
         authorName: post.authorName,
         authorAvatar: post.authorAvatar,
@@ -199,13 +218,16 @@ class StructuredArticleData {
         readTime: post.estimatedReadTime,
         in20SecondsSummary: full.in20Seconds.isNotEmpty
             ? full.in20Seconds
-            : (post.quickBrief?.quickSummary ?? ''),
+            : (qb?.quickSummary ?? ''),
         keyNumbers: full.keyStats
             .map((stat) => KeyNumberItem(value: stat.value, label: stat.label))
             .toList(),
         whyItMatters: full.whyThisMatters.isNotEmpty
             ? full.whyThisMatters
-            : (post.quickBrief?.quickSummary ?? ''),
+            : (qb?.quickSummary ?? ''),
+        audioUrl: audioUrl,
+        audioStatus: audioStatus,
+        contentLanguage: effectiveLanguage,
         exploreSections: [
           if (full.whatHappened.isNotEmpty)
             ExploreStoryItem(

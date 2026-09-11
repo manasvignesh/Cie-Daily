@@ -2,13 +2,14 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/providers/language_provider.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../feed/data/firebase_feed_repository.dart';
 import '../../feed/models/post_model.dart';
 import '../models/structured_article_model.dart';
-import '../services/article_narration_service.dart';
-import 'narration_controls.dart';
+import 'language_picker_sheet.dart';
+import 'premium_audio_player.dart';
 
 class QuickBriefSheet extends ConsumerStatefulWidget {
   final List<PostModel> featuredPosts;
@@ -58,7 +59,7 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
     _currentIndex =
         widget.initialIndex.clamp(0, widget.featuredPosts.length - 1);
     _pageController = PageController(initialPage: _currentIndex);
-    _pages = widget.featuredPosts.map(_buildPageData).toList(growable: false);
+    _pages = widget.featuredPosts.map((p) => _buildPageData(p, ref.read(contentLanguageProvider))).toList(growable: false);
     for (final post in widget.featuredPosts) {
       _savedStates[post.id] = post.isBookmarkedByCurrentUser;
     }
@@ -75,7 +76,7 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
             .featuredPosts[
                 _currentIndex.clamp(0, oldWidget.featuredPosts.length - 1)]
             .id;
-    _pages = widget.featuredPosts.map(_buildPageData).toList(growable: false);
+    _pages = widget.featuredPosts.map((p) => _buildPageData(p, ref.read(contentLanguageProvider))).toList(growable: false);
     for (final post in widget.featuredPosts) {
       _savedStates.putIfAbsent(post.id, () => post.isBookmarkedByCurrentUser);
     }
@@ -93,7 +94,6 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
 
   @override
   void dispose() {
-    ref.read(articleNarrationProvider.notifier).stop();
     _pageController.dispose();
     super.dispose();
   }
@@ -179,11 +179,17 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
     return first;
   }
 
-  _QuickBriefPageData _buildPageData(PostModel post) {
+    _QuickBriefPageData _buildPageData(PostModel post, String language) {
     final legacyData = post.schemaVersion < 2
-        ? StructuredArticleData.fromPostModel(post)
+        ? StructuredArticleData.fromPostModel(post, language: language)
         : null;
-    final quick = post.quickBrief;
+        
+    final loc = post.publishedArticle.languages[language];
+    final isLoc = loc != null && loc.translationStatus == 'ready';
+    final quick = isLoc ? loc.quickBrief : post.quickBrief;
+    final audioStatus = loc?.audioStatus ?? 'unavailable';
+    final audioUrl = audioStatus == 'ready' ? loc?.audioUrl : null;
+
     final keyNumber = post.schemaVersion >= 2
         ? (quick?.keyNumber == null
             ? null
@@ -212,11 +218,16 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
             : legacyData!.takeaways,
       ),
       keyNumber: keyNumber,
+      audioStatus: audioStatus,
+      audioUrl: audioUrl,
+      language: language,
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    _pages = widget.featuredPosts.map((p) => _buildPageData(p, ref.watch(contentLanguageProvider))).toList(growable: false);
+
     final primaryText = AppTheme.primaryTextColor(context);
     final secondaryText = AppTheme.secondaryTextColor(context);
     final elevatedSurface = AppTheme.elevatedSurfaceColor(context);
@@ -314,7 +325,6 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
               itemCount: _pages.length,
               onPageChanged: (index) {
                 HapticFeedback.lightImpact();
-                ref.read(articleNarrationProvider.notifier).stop();
                 setState(() => _currentIndex = index);
               },
               itemBuilder: (context, index) {
@@ -338,15 +348,32 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // 3. CATEGORY TAG (SMALL UPPERCASE TEXT, NO GIANT PILL)
-                      Text(
-                        category.toUpperCase(),
-                        style: const TextStyle(
-                          color: AppTheme.primaryOrange,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 11,
-                          letterSpacing: 0.8,
-                          fontFamily: 'Inter',
-                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            category.toUpperCase(),
+                            style: const TextStyle(
+                              color: AppTheme.primaryOrange,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 11,
+                              letterSpacing: 0.8,
+                              fontFamily: 'Inter',
+                            ),
+                          ),
+                          Builder(
+                            builder: (context) {
+                              final availableLanguages = ['en'];
+                              page.post.publishedArticle.languages.forEach((k, v) {
+                                if (k != 'en' && v.translationStatus == 'ready') availableLanguages.add(k);
+                              });
+                              return LanguagePickerButton(
+                                availableLanguageIds: availableLanguages,
+                                compact: true,
+                              );
+                            },
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 8),
 
@@ -383,12 +410,12 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Row(
+                              const Row(
                                 children: [
-                                  const Icon(Icons.bolt_rounded,
+                                  Icon(Icons.bolt_rounded,
                                       color: AppTheme.primaryOrange, size: 18),
-                                  const SizedBox(width: 6),
-                                  const Text(
+                                  SizedBox(width: 6),
+                                  Text(
                                     'IN 20 SECONDS',
                                     style: TextStyle(
                                       color: AppTheme.primaryOrange,
@@ -398,23 +425,23 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
                                       fontFamily: 'Inter',
                                     ),
                                   ),
-                                  const Spacer(),
-                                  NarrationButton(
-                                    articleId: post.id,
-                                    label: 'LISTEN',
-                                    compact: true,
-                                    onPlay: () => ref
-                                        .read(articleNarrationProvider.notifier)
-                                        .playBrief(
-                                          articleId: post.id,
-                                          headline: headline,
-                                          summary: normalizedSummary,
-                                          facts: normalizedFacts,
-                                        ),
-                                  ),
                                 ],
                               ),
-                              const CompactNarrationPlayer(),
+                              const SizedBox(height: 10),
+                              if (page.audioUrl != null)
+                                PremiumAudioPlayer(
+                                  audioUrl: page.audioUrl!,
+                                  title: headline,
+                                  language: page.language,
+                                  audioStatus: page.audioStatus,
+                                  compact: true,
+                                )
+                              else
+                                RemoteNarrationUnavailable(
+                                  language: page.language,
+                                  audioStatus: page.audioStatus,
+                                  compact: true,
+                                ),
                               const SizedBox(height: 10),
                               Text(
                                 normalizedSummary,
@@ -571,6 +598,9 @@ class _QuickBriefPageData {
   final String summary;
   final List<String> facts;
   final KeyNumberItem? keyNumber;
+  final String? audioUrl;
+  final String audioStatus;
+  final String language;
 
   const _QuickBriefPageData({
     required this.post,
@@ -579,5 +609,14 @@ class _QuickBriefPageData {
     required this.summary,
     required this.facts,
     required this.keyNumber,
+    required this.audioUrl,
+    required this.audioStatus,
+    required this.language,
   });
 }
+
+
+
+
+
+
