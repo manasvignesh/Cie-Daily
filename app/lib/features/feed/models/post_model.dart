@@ -12,6 +12,7 @@ class PostModel {
   final int commentsCount;
   final bool isTodaysDrop;
   final DateTime createdAt;
+  final DateTime? publishedAt;
   final String authorName;
   final String? authorAvatar;
   final String? authorEmail;
@@ -43,6 +44,7 @@ class PostModel {
     required this.commentsCount,
     required this.isTodaysDrop,
     required this.createdAt,
+    this.publishedAt,
     required this.authorName,
     this.authorAvatar,
     this.authorEmail,
@@ -78,6 +80,7 @@ class PostModel {
     final rawTitle = json['title']?.toString() ?? '';
     final rawCategory = json['category']?.toString() ?? 'Discover';
     final createdAt = _dateValue(json['createdAt']);
+    final publishedAt = _nullableDateValue(json['publishedAt']);
     final mediaUrls = json['mediaUrls'] is List
         ? (json['mediaUrls'] as List)
             .map((value) => value?.toString() ?? '')
@@ -134,6 +137,7 @@ class PostModel {
       isTodaysDrop:
           json['isTodaysDrop'] is bool ? json['isTodaysDrop'] as bool : false,
       createdAt: createdAt,
+      publishedAt: publishedAt,
       authorName: (author['name']?.toString().trim().isNotEmpty == true)
           ? author['name'].toString()
           : ((author['fullName']?.toString().trim().isNotEmpty == true)
@@ -165,16 +169,17 @@ class PostModel {
   factory PostModel.fromMap(Map<String, dynamic> data, String id) {
     data['id'] = id;
 
-    // Convert Firestore Timestamp if present
-    if (data['createdAt'] != null && data['createdAt'] is! String) {
-      final timestamp = data['createdAt'];
-      if (timestamp is DateTime) {
-        data['createdAt'] = timestamp.toIso8601String();
-      } else {
-        try {
-          data['createdAt'] = timestamp.toDate().toIso8601String();
-        } catch (_) {
-          // Keep malformed historical timestamps from dropping the story.
+    for (final field in ['createdAt', 'publishedAt']) {
+      if (data[field] != null && data[field] is! String) {
+        final timestamp = data[field];
+        if (timestamp is DateTime) {
+          data[field] = timestamp.toIso8601String();
+        } else {
+          try {
+            data[field] = timestamp.toDate().toIso8601String();
+          } catch (_) {
+            // Keep malformed historical timestamps from dropping the story.
+          }
         }
       }
     }
@@ -192,6 +197,7 @@ class PostModel {
     int? commentsCount,
     bool? isTodaysDrop,
     DateTime? createdAt,
+    DateTime? publishedAt,
     String? authorName,
     String? authorAvatar,
     String? imageUrl,
@@ -213,6 +219,7 @@ class PostModel {
       commentsCount: commentsCount ?? this.commentsCount,
       isTodaysDrop: isTodaysDrop ?? this.isTodaysDrop,
       createdAt: createdAt ?? this.createdAt,
+      publishedAt: publishedAt ?? this.publishedAt,
       authorName: authorName ?? this.authorName,
       authorAvatar: authorAvatar ?? this.authorAvatar,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -229,14 +236,22 @@ class PostModel {
   }
 }
 
+extension PostChronology on PostModel {
+  DateTime get chronologicalDate => publishedAt ?? createdAt;
+}
+
 int _intValue(dynamic value) {
   if (value is int) return value;
   return int.tryParse(value?.toString() ?? '') ?? 1;
 }
 
 DateTime _dateValue(dynamic value) {
+  return _nullableDateValue(value) ?? DateTime.fromMillisecondsSinceEpoch(0);
+}
+
+DateTime? _nullableDateValue(dynamic value) {
   if (value is DateTime) return value;
-  if (value is String) return DateTime.tryParse(value) ?? DateTime.now();
+  if (value is String) return DateTime.tryParse(value);
   if (value != null) {
     try {
       final converted = value.toDate();
@@ -245,7 +260,7 @@ DateTime _dateValue(dynamic value) {
       // Keep malformed historical timestamps from dropping an entire story.
     }
   }
-  return DateTime.now();
+  return null;
 }
 
 List<String> _strings(dynamic value) {

@@ -74,25 +74,34 @@ class _DeviceNarrationPlayerState extends State<DeviceNarrationPlayer> {
       }
       return;
     }
-    final locale = _localeByLanguage[widget.language] ?? 'en-IN';
-    final available = await _tts.isLanguageAvailable(locale);
-    if (available != true || widget.text.trim().isEmpty) {
-      if (mounted) {
-        setState(() => _unavailable = true);
+    try {
+      final locale = _localeByLanguage[widget.language] ?? 'en-IN';
+      final available = await _tts.isLanguageAvailable(locale);
+      if (available != true || widget.text.trim().isEmpty) {
+        if (mounted) {
+          setState(() => _unavailable = true);
+        }
+        return;
       }
-      return;
-    }
-    await _tts.setLanguage(locale);
-    await _tts.setSpeechRate(0.48);
-    await _tts.awaitSpeakCompletion(false);
-    debugPrint('[AUDIO] language=${widget.language}');
-    debugPrint('[AUDIO] source=local_tts');
-    final result = await _tts.speak(widget.text.trim());
-    if (mounted) {
-      setState(() {
-        _speaking = result == 1;
-        _unavailable = result != 1;
-      });
+      await _tts.setLanguage(locale);
+      await _tts.setSpeechRate(0.48);
+      await _tts.awaitSpeakCompletion(false);
+      debugPrint('[AUDIO] language=${widget.language}');
+      debugPrint('[AUDIO] source=local_tts');
+      final result = await _tts.speak(widget.text.trim());
+      if (mounted) {
+        setState(() {
+          _speaking = result == 1;
+          _unavailable = result != 1;
+        });
+      }
+    } on Object {
+      if (mounted) {
+        setState(() {
+          _speaking = false;
+          _unavailable = true;
+        });
+      }
     }
   }
 
@@ -105,21 +114,21 @@ class _DeviceNarrationPlayerState extends State<DeviceNarrationPlayer> {
   @override
   Widget build(BuildContext context) {
     if (_unavailable) {
-      return Text('Narration unavailable',
+      return Text("Narration isn't available right now.",
           style: TextStyle(
               color: AppTheme.secondaryTextColor(context), fontSize: 12));
     }
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      mainAxisSize: widget.compact ? MainAxisSize.min : MainAxisSize.max,
       children: [
         IconButton(
-          tooltip: _speaking ? 'Stop device voice' : 'Listen with device voice',
+          tooltip: _speaking ? 'Stop narration' : 'Listen',
           onPressed: _toggle,
           icon: Icon(
               _speaking ? Icons.stop_circle_rounded : Icons.volume_up_rounded,
               color: AppTheme.primaryOrange),
         ),
-        Text('Using device voice',
+        Text(_speaking ? 'Stop' : 'Listen',
             style: TextStyle(
                 fontSize: widget.compact ? 11 : 12,
                 color: AppTheme.secondaryTextColor(context))),

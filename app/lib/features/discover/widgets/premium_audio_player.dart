@@ -19,27 +19,12 @@ class RemoteNarrationUnavailable extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      margin: EdgeInsets.symmetric(vertical: compact ? 0 : 16),
-      padding: EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: compact ? 10 : 12,
-      ),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceMutedColor(context),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.cardBorderColor(context)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.volume_up_rounded,
-              color: AppTheme.primaryOrange, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-              child: DeviceNarrationPlayer(
-                  text: fallbackText, language: language, compact: compact)),
-        ],
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: compact ? 0 : 8),
+      child: DeviceNarrationPlayer(
+        text: fallbackText,
+        language: language,
+        compact: compact,
       ),
     );
   }
@@ -148,11 +133,14 @@ class _PremiumAudioPlayerState extends State<PremiumAudioPlayer> {
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: EdgeInsets.symmetric(vertical: widget.compact ? 4 : 16),
+      padding: EdgeInsets.symmetric(
+        horizontal: widget.compact ? 10 : 16,
+        vertical: widget.compact ? 8 : 12,
+      ),
       decoration: BoxDecoration(
         color: AppTheme.surfaceMutedColor(context),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(8),
         border: Border.all(color: AppTheme.cardBorderColor(context)),
       ),
       child: Column(
@@ -174,7 +162,7 @@ class _PremiumAudioPlayerState extends State<PremiumAudioPlayer> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Editorial Narration',
+                    const Text('Listen',
                         style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.bold,

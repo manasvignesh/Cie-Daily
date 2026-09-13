@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../feed/models/post_model.dart';
+import '../models/article_chronology.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 const _transientFirestoreCodes = <String>{
@@ -20,7 +21,11 @@ List<PostModel> _parseDiscoverArticles(
   for (final doc in snapshot.docs) {
     try {
       final data = Map<String, dynamic>.from(doc.data());
-      if (requireApprovedStatus && data['status'] != 'approved') continue;
+      if (requireApprovedStatus &&
+          data['status'] != 'approved' &&
+          data['status'] != 'published') {
+        continue;
+      }
 
       final likedBy = List<String>.from(data['likedBy'] ?? const []);
       final bookmarkedBy = List<String>.from(data['bookmarkedBy'] ?? const []);
@@ -34,15 +39,13 @@ List<PostModel> _parseDiscoverArticles(
       // One malformed producer document must not hide every published story.
     }
   }
-  return posts;
+  return sortArticlesNewestFirst(posts);
 }
 
 Stream<List<PostModel>> _discoverStream(String userId) async* {
   final posts = FirebaseFirestore.instance.collection('posts');
   final primaryQuery = posts
-      .where('status', isEqualTo: 'approved')
-      .orderBy('createdAt', descending: true)
-      .limit(60);
+      .where('status', whereIn: const ['approved', 'published']);
 
   var retryCount = 0;
   while (true) {
@@ -56,10 +59,7 @@ Stream<List<PostModel>> _discoverStream(String userId) async* {
       // Older/new Firebase projects may briefly lack the compound index. The
       // single-field query keeps Discover usable while that index is prepared.
       if (error.code == 'failed-precondition') {
-        yield* posts
-            .orderBy('createdAt', descending: true)
-            .limit(100)
-            .snapshots()
+        yield* posts.snapshots()
             .map((snapshot) => _parseDiscoverArticles(
                   snapshot,
                   userId,
