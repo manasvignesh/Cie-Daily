@@ -59,7 +59,9 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
     _currentIndex =
         widget.initialIndex.clamp(0, widget.featuredPosts.length - 1);
     _pageController = PageController(initialPage: _currentIndex);
-    _pages = widget.featuredPosts.map((p) => _buildPageData(p, ref.read(contentLanguageProvider))).toList(growable: false);
+    _pages = widget.featuredPosts
+        .map((p) => _buildPageData(p, ref.read(contentLanguageProvider)))
+        .toList(growable: false);
     for (final post in widget.featuredPosts) {
       _savedStates[post.id] = post.isBookmarkedByCurrentUser;
     }
@@ -76,7 +78,9 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
             .featuredPosts[
                 _currentIndex.clamp(0, oldWidget.featuredPosts.length - 1)]
             .id;
-    _pages = widget.featuredPosts.map((p) => _buildPageData(p, ref.read(contentLanguageProvider))).toList(growable: false);
+    _pages = widget.featuredPosts
+        .map((p) => _buildPageData(p, ref.read(contentLanguageProvider)))
+        .toList(growable: false);
     for (final post in widget.featuredPosts) {
       _savedStates.putIfAbsent(post.id, () => post.isBookmarkedByCurrentUser);
     }
@@ -179,16 +183,18 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
     return first;
   }
 
-    _QuickBriefPageData _buildPageData(PostModel post, String language) {
+  _QuickBriefPageData _buildPageData(PostModel post, String language) {
     final legacyData = post.schemaVersion < 2
         ? StructuredArticleData.fromPostModel(post, language: language)
         : null;
-        
+
     final loc = post.publishedArticle.languages[language];
     final isLoc = loc != null && loc.translationStatus == 'ready';
+    final effectiveLanguage = isLoc ? language : 'en';
+    final effectiveLoc = isLoc ? loc : post.publishedArticle.languages['en'];
     final quick = isLoc ? loc.quickBrief : post.quickBrief;
-    final audioStatus = loc?.audioStatus ?? 'unavailable';
-    final audioUrl = audioStatus == 'ready' ? loc?.audioUrl : null;
+    final audioStatus = effectiveLoc?.audioStatus ?? 'unavailable';
+    final audioUrl = audioStatus == 'ready' ? effectiveLoc?.audioUrl : null;
 
     final keyNumber = post.schemaVersion >= 2
         ? (quick?.keyNumber == null
@@ -220,13 +226,15 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
       keyNumber: keyNumber,
       audioStatus: audioStatus,
       audioUrl: audioUrl,
-      language: language,
+      language: effectiveLanguage,
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    _pages = widget.featuredPosts.map((p) => _buildPageData(p, ref.watch(contentLanguageProvider))).toList(growable: false);
+    _pages = widget.featuredPosts
+        .map((p) => _buildPageData(p, ref.watch(contentLanguageProvider)))
+        .toList(growable: false);
 
     final primaryText = AppTheme.primaryTextColor(context);
     final secondaryText = AppTheme.secondaryTextColor(context);
@@ -364,8 +372,12 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
                           Builder(
                             builder: (context) {
                               final availableLanguages = ['en'];
-                              page.post.publishedArticle.languages.forEach((k, v) {
-                                if (k != 'en' && v.translationStatus == 'ready') availableLanguages.add(k);
+                              page.post.publishedArticle.languages
+                                  .forEach((k, v) {
+                                if (k != 'en' &&
+                                    v.translationStatus == 'ready') {
+                                  availableLanguages.add(k);
+                                }
                               });
                               return LanguagePickerButton(
                                 availableLanguageIds: availableLanguages,
@@ -434,12 +446,14 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
                                   title: headline,
                                   language: page.language,
                                   audioStatus: page.audioStatus,
+                                  fallbackText: page.fallbackText,
                                   compact: true,
                                 )
                               else
                                 RemoteNarrationUnavailable(
                                   language: page.language,
                                   audioStatus: page.audioStatus,
+                                  fallbackText: page.fallbackText,
                                   compact: true,
                                 ),
                               const SizedBox(height: 10),
@@ -601,6 +615,15 @@ class _QuickBriefPageData {
   final String? audioUrl;
   final String audioStatus;
   final String language;
+  String get fallbackText => [
+        headline,
+        summary,
+        ...facts,
+        if (keyNumber != null) '${keyNumber!.value} ${keyNumber!.label}',
+      ]
+          .map((part) => part.trim())
+          .where((part) => part.isNotEmpty)
+          .join('\n\n');
 
   const _QuickBriefPageData({
     required this.post,
@@ -614,9 +637,3 @@ class _QuickBriefPageData {
     required this.language,
   });
 }
-
-
-
-
-
-

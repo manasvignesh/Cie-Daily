@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'core/providers/language_provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -67,7 +69,11 @@ Future<void> _bootstrap() async {
     // Firestore remains the source of truth; local caching is non-critical.
   }
 
-  const app = ProviderScope(child: CIEConnectApp());
+  final prefs = await SharedPreferences.getInstance();
+  final app = ProviderScope(
+    overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+    child: const CIEConnectApp(),
+  );
   try {
     await SentryFlutter.init(
       (options) {
@@ -125,7 +131,7 @@ class _StartupFailureAppState extends State<StartupFailureApp> {
                       size: 56, color: Color(0xFFFF5A1F)),
                   const SizedBox(height: 20),
                   const Text(
-                    "CIE Daily couldn't start correctly.",
+                    "Breakpoint couldn't start correctly.",
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),

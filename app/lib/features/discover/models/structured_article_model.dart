@@ -70,6 +70,20 @@ class StructuredArticleData {
     this.contentLanguage = 'en',
   });
 
+  String get narrationFallbackText {
+    final sections = exploreSections
+        .map((section) => '${section.title}. ${section.previewText}')
+        .where((part) => part.trim().isNotEmpty);
+    return [
+      headline,
+      hook,
+      in20SecondsSummary,
+      whyItMatters,
+      ...sections,
+      ...takeaways,
+    ].map((part) => part.trim()).where((part) => part.isNotEmpty).join('\n\n');
+  }
+
   /// Reference Implementation: Matel Motion EV Powertrains story
   static StructuredArticleData get matelMotionSample {
     return const StructuredArticleData(
@@ -160,14 +174,17 @@ class StructuredArticleData {
   }
 
   /// Synthesizes a structured article from any generic PostModel
-  factory StructuredArticleData.fromPostModel(PostModel post, {String language = 'en'}) {
+  factory StructuredArticleData.fromPostModel(PostModel post,
+      {String language = 'en'}) {
     if (post.schemaVersion >= 2) {
       final loc = post.publishedArticle.languages[language];
       final isLoc = loc != null && loc.translationStatus == 'ready';
       final qb = isLoc ? loc.quickBrief : post.quickBrief;
       final full = isLoc ? loc.fullArticle : post.fullArticle;
-      
-      // Fallback audio to English if selected language audio is not ready or missing
+
+      // A globally selected language may not be ready on this article yet.
+      // In that case both the text and remote narration consistently fall
+      // back to English; a ready selected language always uses its own URL.
       final effectiveLoc = isLoc ? loc : post.publishedArticle.languages['en'];
       final audioStatus = effectiveLoc?.audioStatus ?? 'unavailable';
       final audioUrl = audioStatus == 'ready' ? effectiveLoc?.audioUrl : null;
@@ -207,9 +224,7 @@ class StructuredArticleData {
         headline: full.headline.isNotEmpty
             ? full.headline
             : (qb?.headline ?? (isLoc ? loc.title : post.title)),
-        hook: full.hook.isNotEmpty
-            ? full.hook
-            : (qb?.quickSummary ?? ''),
+        hook: full.hook.isNotEmpty ? full.hook : (qb?.quickSummary ?? ''),
         heroImage: post.imageUrl,
         authorName: post.authorName,
         authorAvatar: post.authorAvatar,
