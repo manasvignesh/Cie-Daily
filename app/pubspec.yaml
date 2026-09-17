@@ -68,6 +68,4 @@ flutter:
       fonts:
         - asset: assets/fonts/Sora-Variable.ttf
 
-  assets:
-    - assets/icons/
-    - assets/illustrations/
+  # Note: fonts are the only bundled assets; logos and splash are code-drawn.

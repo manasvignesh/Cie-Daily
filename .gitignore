@@ -1,5 +1,4 @@
-﻿flutter.zip
-scratch_livekit/
+flutter.zip
 app/android/app/google-services.json
 app/firebase.json
 app/.firebaserc
@@ -7,3 +6,7 @@ app/.firebaserc
 node_modules/
 app/build/
 supabase/.temp/
+# Prevent future development artifacts from being committed
+*-backup*/
+*.mp4
+*.wav

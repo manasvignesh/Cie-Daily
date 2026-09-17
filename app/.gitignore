@@ -50,3 +50,11 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Development artifacts — never commit these
+flutter-build.log
+flutter-build.err
+latest.json
+deps.txt
+outdated.txt
+device-screen*.png
