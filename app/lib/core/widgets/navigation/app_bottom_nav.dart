@@ -15,9 +15,10 @@ class AppBottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = AppTheme.isDark(context);
-    final backgroundColor = AppTheme.cardColor(context);
-    final borderColor = AppTheme.cardBorderColor(context);
-    const activeColor = AppTheme.primaryOrange;
+    final backgroundColor = AppTheme.glassSurfaceColor(context);
+    final borderColor = AppTheme.materialEdgeColor(context);
+    final activeColor = AppTheme.accentColor(context);
+    final nearGlow = AppTheme.nearGlowColor(context);
     final inactiveColor = AppTheme.secondaryTextColor(context);
 
     const items = [
@@ -54,7 +55,7 @@ class AppBottomNav extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.08),
-              blurRadius: 20,
+              blurRadius: 18,
               offset: const Offset(0, 8),
             ),
           ],
@@ -81,13 +82,37 @@ class AppBottomNav extends StatelessWidget {
                           alignment: Alignment.center,
                           clipBehavior: Clip.none,
                           children: [
-                            AnimatedSwitcher(
-                              duration: const Duration(milliseconds: 180),
-                              child: Icon(
-                                isSelected ? item.activeIcon : item.icon,
-                                key: ValueKey('${item.label}_$isSelected'),
-                                size: 22,
-                                color: isSelected ? activeColor : inactiveColor,
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutCubic,
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: isSelected
+                                    ? AppTheme.selectedSurfaceColor(context)
+                                    : Colors.transparent,
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: nearGlow.withValues(
+                                              alpha: 0.10),
+                                          blurRadius: 8,
+                                        ),
+                                      ]
+                                    : const [],
+                              ),
+                              child: AnimatedScale(
+                                scale: isSelected ? 1.06 : 1,
+                                duration: const Duration(milliseconds: 180),
+                                curve: Curves.easeOutCubic,
+                                child: Icon(
+                                  isSelected ? item.activeIcon : item.icon,
+                                  key: ValueKey('${item.label}_$isSelected'),
+                                  size: 22,
+                                  color:
+                                      isSelected ? activeColor : inactiveColor,
+                                ),
                               ),
                             ),
                           ],
@@ -95,12 +120,28 @@ class AppBottomNav extends StatelessWidget {
                         const SizedBox(height: 4),
                         // Breakpoint Marker Dot for Active Tab
                         if (isSelected)
-                          Container(
-                            width: 4,
-                            height: 4,
-                            decoration: const BoxDecoration(
-                              color: activeColor,
-                              shape: BoxShape.circle,
+                          TweenAnimationBuilder<double>(
+                            tween: Tween(begin: 0.55, end: 1),
+                            duration: const Duration(milliseconds: 220),
+                            curve: Curves.easeOutCubic,
+                            builder: (context, value, _) => Transform.scale(
+                              scale: value,
+                              child: Container(
+                                width: 4,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: activeColor,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: nearGlow.withValues(
+                                        alpha: 0.20,
+                                      ),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           )
                         else

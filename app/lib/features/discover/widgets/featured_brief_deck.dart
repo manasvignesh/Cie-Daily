@@ -229,15 +229,23 @@ class _DeckPageMotion extends StatelessWidget {
             controller.hasClients && controller.position.hasContentDimensions
                 ? (controller.page ?? controller.initialPage.toDouble())
                 : controller.initialPage.toDouble();
-        final distance = (page - index).abs().clamp(0.0, 1.0);
-        final scale = 1.0 - (distance * 0.025);
+        final delta = (page - index).clamp(-1.0, 1.0);
+        final distance = delta.abs();
+        final scale = 1.0 - (distance * 0.032);
+        final opacity = 1.0 - (distance * 0.16);
 
-        return Transform.translate(
-          offset: Offset(0, distance * 7),
-          child: Transform.scale(
-            scale: scale,
-            alignment: Alignment.centerLeft,
-            child: child,
+        return Opacity(
+          opacity: opacity,
+          child: Transform.translate(
+            offset: Offset(delta * 4, distance * 8),
+            child: Transform.rotate(
+              angle: delta * 0.012,
+              child: Transform.scale(
+                scale: scale,
+                alignment: Alignment.centerLeft,
+                child: child,
+              ),
+            ),
           ),
         );
       },
@@ -281,7 +289,7 @@ class _BriefDeckPresentation {
   }
 }
 
-class _BriefDeckCard extends StatelessWidget {
+class _BriefDeckCard extends StatefulWidget {
   final _BriefDeckPresentation presentation;
   final bool isSaved;
   final VoidCallback onTap;
@@ -295,157 +303,218 @@ class _BriefDeckCard extends StatelessWidget {
   });
 
   @override
+  State<_BriefDeckCard> createState() => _BriefDeckCardState();
+}
+
+class _BriefDeckCardState extends State<_BriefDeckCard> {
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
-    final post = presentation.post;
-    final isDark = AppTheme.isDark(context);
+    final post = widget.presentation.post;
     final primaryText = AppTheme.primaryTextColor(context);
     final secondaryText = AppTheme.secondaryTextColor(context);
-    final cardColor = AppTheme.cardColor(context);
+    final accent = AppTheme.accentColor(context);
+    final materialEdge = AppTheme.materialEdgeColor(context);
+    final metalHighlight = AppTheme.metalHighlightColor(context);
     final decodeWidth = (MediaQuery.sizeOf(context).width *
             MediaQuery.devicePixelRatioOf(context))
         .round();
 
     return Semantics(
       button: true,
-      label: '${presentation.headline}. Open quick brief.',
+      label: '${widget.presentation.headline}. Open quick brief.',
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
+        elevation: _pressed ? 11 : 8,
+        shadowColor: Colors.black.withValues(alpha: 0.5),
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(22),
-          child: Ink(
-            decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(22),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.09),
-                  blurRadius: 18,
-                  offset: const Offset(0, 7),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: widget.onTap,
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTapUp: (_) => setState(() => _pressed = false),
+          borderRadius: BorderRadius.circular(22),
+          child: AnimatedScale(
+            scale: _pressed ? 0.985 : 1,
+            duration: const Duration(milliseconds: 110),
+            curve: Curves.easeOutCubic,
+            child: Ink(
+              decoration: BoxDecoration(
+                gradient: AppTheme.premiumSurfaceGradient(context),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: Color.lerp(
+                    materialEdge,
+                    metalHighlight,
+                    _pressed ? 0.42 : 0.24,
+                  )!,
+                  width: _pressed ? 1.25 : 1,
                 ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(22),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _DeckHero(
-                    imageUrl: post.imageUrl,
-                    category: presentation.category,
-                    title: presentation.headline,
-                    decodeWidth: decodeWidth,
-                  ),
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 16, 12, 12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            presentation.headline,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: primaryText,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              fontFamily: 'Outfit',
-                              height: 1.12,
-                              letterSpacing: -0.45,
-                            ),
-                          ),
-                          if (presentation.hook.isNotEmpty) ...[
-                            const SizedBox(height: 8),
-                            Text(
-                              presentation.hook,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: secondaryText,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                fontFamily: 'Inter',
-                                height: 1.35,
-                              ),
-                            ),
-                          ],
-                          const Spacer(),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.schedule_rounded,
-                                        size: 15, color: secondaryText),
-                                    const SizedBox(width: 5),
-                                    Flexible(
-                                      child: Text(
-                                        '${post.estimatedReadTime} min brief',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: secondaryText,
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w600,
-                                          fontFamily: 'Inter',
-                                        ),
-                                      ),
-                                    ),
-                                    if (MediaQuery.textScalerOf(context)
-                                            .scale(1) <=
-                                        1.3) ...[
-                                      const SizedBox(width: 12),
-                                      Icon(
-                                        Icons.swipe_rounded,
-                                        size: 15,
-                                        color: secondaryText.withValues(
-                                          alpha: 0.8,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        'Swipe',
-                                        style: TextStyle(
-                                          color: secondaryText.withValues(
-                                            alpha: 0.85,
-                                          ),
-                                          fontSize: 11.5,
-                                          fontWeight: FontWeight.w600,
-                                          fontFamily: 'Inter',
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                              Semantics(
-                                button: true,
-                                label: isSaved
-                                    ? 'Remove saved story'
-                                    : 'Save story',
-                                child: IconButton(
-                                  visualDensity: VisualDensity.compact,
-                                  icon: Icon(
-                                    isSaved
-                                        ? Icons.bookmark_rounded
-                                        : Icons.bookmark_border_rounded,
-                                    color: isSaved
-                                        ? AppTheme.primaryOrange
-                                        : secondaryText,
-                                    size: 22,
-                                  ),
-                                  onPressed: onSave,
-                                  tooltip: isSaved ? 'Saved' : 'Save story',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                boxShadow: [
+                  BoxShadow(
+                    color: metalHighlight.withValues(
+                      alpha: _pressed ? 0.09 : 0.045,
                     ),
+                    blurRadius: _pressed ? 12 : 8,
+                    spreadRadius: 0,
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 18,
+                    offset: const Offset(0, 7),
                   ),
                 ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _DeckHero(
+                          imageUrl: post.imageUrl,
+                          category: widget.presentation.category,
+                          title: widget.presentation.headline,
+                          decodeWidth: decodeWidth,
+                        ),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(18, 16, 12, 12),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.presentation.headline,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: primaryText,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    fontFamily: 'Sora',
+                                    height: 1.12,
+                                    letterSpacing: -0.45,
+                                  ),
+                                ),
+                                if (widget.presentation.hook.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    widget.presentation.hook,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: secondaryText,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      fontFamily: 'Inter',
+                                      height: 1.35,
+                                    ),
+                                  ),
+                                ],
+                                const Spacer(),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Row(
+                                        children: [
+                                          Icon(Icons.schedule_rounded,
+                                              size: 15, color: secondaryText),
+                                          const SizedBox(width: 5),
+                                          Flexible(
+                                            child: Text(
+                                              '${post.estimatedReadTime} min brief',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: TextStyle(
+                                                color: secondaryText,
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w600,
+                                                fontFamily: 'Inter',
+                                              ),
+                                            ),
+                                          ),
+                                          if (MediaQuery.textScalerOf(context)
+                                                  .scale(1) <=
+                                              1.3) ...[
+                                            const SizedBox(width: 12),
+                                            Icon(
+                                              Icons.swipe_rounded,
+                                              size: 15,
+                                              color: secondaryText.withValues(
+                                                alpha: 0.8,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 5),
+                                            Text(
+                                              'Swipe',
+                                              style: TextStyle(
+                                                color: secondaryText.withValues(
+                                                  alpha: 0.85,
+                                                ),
+                                                fontSize: 11.5,
+                                                fontWeight: FontWeight.w600,
+                                                fontFamily: 'Inter',
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                    Semantics(
+                                      button: true,
+                                      label: widget.isSaved
+                                          ? 'Remove saved story'
+                                          : 'Save story',
+                                      child: IconButton(
+                                        visualDensity: VisualDensity.compact,
+                                        icon: Icon(
+                                          widget.isSaved
+                                              ? Icons.bookmark_rounded
+                                              : Icons.bookmark_border_rounded,
+                                          color: widget.isSaved
+                                              ? accent
+                                              : secondaryText,
+                                          size: 22,
+                                        ),
+                                        onPressed: widget.onSave,
+                                        tooltip: widget.isSaved
+                                            ? 'Saved'
+                                            : 'Save story',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(22),
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.13),
+                              Colors.transparent,
+                              accent.withValues(alpha: 0.035),
+                            ],
+                            stops: const [0, 0.22, 1],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -471,6 +540,7 @@ class _DeckHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    final accent = AppTheme.accentColor(context);
     final fallback = AppTheme.isDark(context)
         ? const Color(0xFF25232A)
         : const Color(0xFFECE8E3);
@@ -503,7 +573,7 @@ class _DeckHero extends StatelessWidget {
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
                   colors: [
-                    AppTheme.primaryOrange.withValues(alpha: 0.18),
+                    accent.withValues(alpha: 0.18),
                     fallback,
                   ],
                 ),
@@ -511,7 +581,7 @@ class _DeckHero extends StatelessWidget {
               child: Icon(
                 Icons.auto_stories_rounded,
                 size: 42,
-                color: AppTheme.primaryOrange.withValues(alpha: 0.65),
+                color: accent.withValues(alpha: 0.65),
               ),
             ),
           if (hasImage)
@@ -532,7 +602,7 @@ class _DeckHero extends StatelessWidget {
               decoration: BoxDecoration(
                 color: hasImage
                     ? Colors.black.withValues(alpha: 0.58)
-                    : AppTheme.primaryOrange.withValues(alpha: 0.13),
+                    : accent.withValues(alpha: 0.13),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Padding(
@@ -541,7 +611,7 @@ class _DeckHero extends StatelessWidget {
                 child: Text(
                   category.isEmpty ? 'BREAKPOINT' : category.toUpperCase(),
                   style: TextStyle(
-                    color: hasImage ? Colors.white : AppTheme.primaryOrange,
+                    color: hasImage ? Colors.white : accent,
                     fontWeight: FontWeight.w800,
                     fontSize: 10.5,
                     letterSpacing: 0.75,
@@ -573,6 +643,7 @@ class _DeckProgressIndicator extends StatelessWidget {
     if (total <= 1) return const SizedBox(height: 20);
 
     final secondaryText = AppTheme.secondaryTextColor(context);
+    final accent = AppTheme.accentColor(context);
     return Semantics(
       label: 'Story ${current + 1} of $total',
       child: Row(
@@ -596,9 +667,7 @@ class _DeckProgressIndicator extends StatelessWidget {
                 minHeight: 4,
                 value: (current + 1) / total,
                 backgroundColor: secondaryText.withValues(alpha: 0.18),
-                valueColor: const AlwaysStoppedAnimation<Color>(
-                  AppTheme.primaryOrange,
-                ),
+                valueColor: AlwaysStoppedAnimation<Color>(accent),
               ),
             ),
           ),

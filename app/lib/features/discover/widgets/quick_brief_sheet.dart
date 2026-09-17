@@ -238,14 +238,13 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
 
     final primaryText = AppTheme.primaryTextColor(context);
     final secondaryText = AppTheme.secondaryTextColor(context);
-    final elevatedSurface = AppTheme.elevatedSurfaceColor(context);
     final borderColor = AppTheme.cardBorderColor(context);
     final screenHeight = MediaQuery.sizeOf(context).height;
 
     return Container(
       height: screenHeight * 0.82,
       decoration: BoxDecoration(
-        color: elevatedSurface,
+        gradient: AppTheme.raisedSurfaceGradient(context),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
         border: Border.all(color: borderColor, width: 1),
         boxShadow: [

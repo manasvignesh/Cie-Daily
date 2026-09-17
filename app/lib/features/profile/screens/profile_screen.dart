@@ -89,7 +89,6 @@ List<String> _parseInterests(Map<String, dynamic>? profileData) {
   return defaults;
 }
 
-
 class ProfileScreen extends ConsumerStatefulWidget {
   final String? targetUserId;
 
@@ -944,8 +943,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                       currentInterests: interests,
                     ),
                     child: Padding(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       child: Text(
                         interests.isEmpty ? '+ Add interests' : 'Edit',
                         style: const TextStyle(
@@ -1181,8 +1180,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                                         });
                                       },
                                 child: AnimatedContainer(
-                                  duration:
-                                      const Duration(milliseconds: 180),
+                                  duration: const Duration(milliseconds: 180),
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 14,
                                     vertical: 8,
@@ -1310,9 +1308,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: isSaving
-                            ? null
-                            : () => Navigator.pop(sheetContext),
+                        onPressed:
+                            isSaving ? null : () => Navigator.pop(sheetContext),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: primaryText,
                           side: BorderSide(color: borderColor),
@@ -1419,7 +1416,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
       ),
     );
   }
-
 
   Widget _buildPostsGrid(
     BuildContext context,
@@ -2247,74 +2243,74 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 ),
 
                 // ── APPEARANCE / THEME SELECTOR ─────────────────────────────
-                const Padding(
+                Padding(
                   padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text('Appearance',
                         style: TextStyle(
-                            color: AppTheme.primaryOrange,
+                            color: AppTheme.accentColor(context),
                             fontSize: 13,
                             fontWeight: FontWeight.bold)),
                   ),
                 ),
                 Consumer(
                   builder: (ctx, ref, _) {
-                    final themeMode = ref.watch(themeModeProvider);
+                    final appearance = ref.watch(appearanceProvider);
                     final primaryText = AppTheme.primaryTextColor(ctx);
                     final secondaryText = AppTheme.secondaryTextColor(ctx);
-                    return RadioGroup<ThemeMode>(
-                      groupValue: themeMode,
+                    return RadioGroup<AppearanceMode>(
+                      groupValue: appearance.mode,
                       onChanged: (value) {
                         if (value != null) {
                           ref
-                              .read(themeModeProvider.notifier)
-                              .setThemeMode(value);
+                              .read(appearanceProvider.notifier)
+                              .setAppearance(value);
                         }
                       },
                       child: Column(
                         children: [
-                          RadioListTile<ThemeMode>(
+                          RadioListTile<AppearanceMode>(
                             contentPadding:
                                 const EdgeInsets.symmetric(horizontal: 16),
-                            title: Text('Dark Mode (Default)',
+                            title: Text('Automatic',
                                 style: TextStyle(
                                     color: primaryText,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14)),
-                            subtitle: Text('Signature dark campus aesthetic',
+                            subtitle: Text('Follow the time of day',
                                 style: TextStyle(
                                     color: secondaryText, fontSize: 12)),
-                            value: ThemeMode.dark,
-                            activeColor: AppTheme.primaryOrange,
+                            value: AppearanceMode.automatic,
+                            activeColor: AppTheme.accentColor(ctx),
                           ),
-                          RadioListTile<ThemeMode>(
+                          RadioListTile<AppearanceMode>(
                             contentPadding:
                                 const EdgeInsets.symmetric(horizontal: 16),
-                            title: Text('Light Mode',
+                            title: Text('Sunlight',
                                 style: TextStyle(
                                     color: primaryText,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14)),
-                            subtitle: Text('Clean, high-contrast warm surface',
+                            subtitle: Text('Warm orange atmosphere',
                                 style: TextStyle(
                                     color: secondaryText, fontSize: 12)),
-                            value: ThemeMode.light,
-                            activeColor: AppTheme.primaryOrange,
+                            value: AppearanceMode.sunlight,
+                            activeColor: AppTheme.accentColor(ctx),
                           ),
-                          RadioListTile<ThemeMode>(
+                          RadioListTile<AppearanceMode>(
                             contentPadding:
                                 const EdgeInsets.symmetric(horizontal: 16),
-                            title: Text('System Default',
+                            title: Text('Moonlight',
                                 style: TextStyle(
                                     color: primaryText,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14)),
-                            subtitle: Text('Follow Android device system theme',
+                            subtitle: Text('Cool sky-blue atmosphere',
                                 style: TextStyle(
                                     color: secondaryText, fontSize: 12)),
-                            value: ThemeMode.system,
-                            activeColor: AppTheme.primaryOrange,
+                            value: AppearanceMode.moonlight,
+                            activeColor: AppTheme.accentColor(ctx),
                           ),
                         ],
                       ),

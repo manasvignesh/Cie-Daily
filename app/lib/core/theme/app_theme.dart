@@ -1,255 +1,290 @@
 import 'package:flutter/material.dart';
 
-/// Centralized Design Tokens for Breakpoint by Manas
+class BreakpointThemeExtension
+    extends ThemeExtension<BreakpointThemeExtension> {
+  final Color background;
+  final Color surface;
+  final Color elevatedSurface;
+  final Color border;
+  final Color primaryText;
+  final Color secondaryText;
+  final Color tertiaryText;
+  final Color nearGlow;
+  final Color ambientGlow;
+
+  const BreakpointThemeExtension({
+    required this.background,
+    required this.surface,
+    required this.elevatedSurface,
+    required this.border,
+    required this.primaryText,
+    required this.secondaryText,
+    required this.tertiaryText,
+    required this.nearGlow,
+    required this.ambientGlow,
+  });
+
+  @override
+  BreakpointThemeExtension copyWith({
+    Color? background,
+    Color? surface,
+    Color? elevatedSurface,
+    Color? border,
+    Color? primaryText,
+    Color? secondaryText,
+    Color? tertiaryText,
+    Color? nearGlow,
+    Color? ambientGlow,
+  }) =>
+      BreakpointThemeExtension(
+        background: background ?? this.background,
+        surface: surface ?? this.surface,
+        elevatedSurface: elevatedSurface ?? this.elevatedSurface,
+        border: border ?? this.border,
+        primaryText: primaryText ?? this.primaryText,
+        secondaryText: secondaryText ?? this.secondaryText,
+        tertiaryText: tertiaryText ?? this.tertiaryText,
+        nearGlow: nearGlow ?? this.nearGlow,
+        ambientGlow: ambientGlow ?? this.ambientGlow,
+      );
+
+  @override
+  BreakpointThemeExtension lerp(
+      covariant ThemeExtension<BreakpointThemeExtension>? other, double t) {
+    if (other is! BreakpointThemeExtension) return this;
+    return BreakpointThemeExtension(
+      background: Color.lerp(background, other.background, t)!,
+      surface: Color.lerp(surface, other.surface, t)!,
+      elevatedSurface: Color.lerp(elevatedSurface, other.elevatedSurface, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      primaryText: Color.lerp(primaryText, other.primaryText, t)!,
+      secondaryText: Color.lerp(secondaryText, other.secondaryText, t)!,
+      tertiaryText: Color.lerp(tertiaryText, other.tertiaryText, t)!,
+      nearGlow: Color.lerp(nearGlow, other.nearGlow, t)!,
+      ambientGlow: Color.lerp(ambientGlow, other.ambientGlow, t)!,
+    );
+  }
+}
+
 class AppTheme {
-  // ── BRAND COLOR PALETTE ──────────────────────────────────────────────────
-  /// Signal Orange: Primary brand accent / breakpoint marker / active state
-  static const Color primaryOrange = Color(0xFFFF6A1A);
-  static const Color secondaryOrange = Color(0xFFD65510);
-  static const Color softEmber = Color(0xFFFF8542);
+  static const Color primaryOrange = Color(0xFFE85A20);
+  static const Color secondaryOrange = Color(0xFFA84C22);
+  static const Color softEmber = Color(0xFF5A3423);
+  static const Color sunlightChampagne = Color(0xFF8A654B);
+  static const Color moonlightAccent = Color(0xFFD8E1E8);
 
-  // ── DARK THEME PALETTE (INK BLACK & GRAPHITE) ────────────────────────────
-  static const Color darkBackground = Color(0xFF080B0C); // Ink Black
-  static const Color darkSurface = Color(0xFF171B1F); // Graphite
-  static const Color darkSurfaceElevated = Color(0xFF22262B);
-  static const Color darkBorder = Color(0xFF2C3137);
-  static const Color darkPrimaryText = Color(0xFFEDE9E0); // Bone White
-  static const Color darkSecondaryText = Color(0xFF8E8E93); // Muted Gray
-  static const Color darkTertiaryText = Color(0xFF5A5E66);
+  static const _warmBackground = Color(0xFF090A0A);
+  static const _warmSurface = Color(0xFF101110);
+  static const _warmElevated = Color(0xFF151411);
+  static const _warmBorder = Color(0xFF302A26);
+  static const _coolBackground = Color(0xFF07090D);
+  static const _coolSurface = Color(0xFF0E1218);
+  static const _coolElevated = Color(0xFF131922);
+  static const _coolBorder = Color(0xFF27313C);
+  static const _warmPrimaryText = Color(0xFFF3F0E9);
+  static const _coolPrimaryText = Color(0xFFF0F1EE);
+  static const _warmSecondaryText = Color(0xFF969792);
+  static const _warmTertiaryText = Color(0xFF73746F);
+  static const _coolSecondaryText = Color(0xFF939CA7);
+  static const _coolTertiaryText = Color(0xFF68727D);
 
-  // ── LIGHT THEME PALETTE (WARM EDITORIAL) ─────────────────────────────────
-  static const Color lightBackground = Color(0xFFF6F6F4);
-  static const Color lightSurface = Color(0xFFFFFFFF);
-  static const Color lightSurfaceElevated = Color(0xFFF0F0EE);
-  static const Color lightBorder = Color(0xFFE5E5EA);
-  static const Color lightPrimaryText = Color(0xFF111315);
-  static const Color lightSecondaryText = Color(0xFF6E6E73);
-  static const Color lightTertiaryText = Color(0xFF8E8E93);
+  static BreakpointThemeExtension colors(double coolFactor) =>
+      BreakpointThemeExtension(
+        background: Color.lerp(_warmBackground, _coolBackground, coolFactor)!,
+        surface: Color.lerp(_warmSurface, _coolSurface, coolFactor)!,
+        elevatedSurface: Color.lerp(_warmElevated, _coolElevated, coolFactor)!,
+        border: Color.lerp(_warmBorder, _coolBorder, coolFactor)!,
+        primaryText:
+            Color.lerp(_warmPrimaryText, _coolPrimaryText, coolFactor)!,
+        secondaryText: Color.lerp(
+            _warmSecondaryText, _coolSecondaryText, coolFactor)!,
+        tertiaryText:
+            Color.lerp(_warmTertiaryText, _coolTertiaryText, coolFactor)!,
+        nearGlow: Color.lerp(
+            const Color(0xFFA84C22), const Color(0xFFD8E1E8), coolFactor)!,
+        ambientGlow:
+            Color.lerp(softEmber, const Color(0xFF56647A), coolFactor)!,
+      );
 
-  // ── THEME HELPERS ────────────────────────────────────────────────────────
-  static bool isDark(BuildContext context) {
-    return Theme.of(context).brightness == Brightness.dark;
+  static Color accentColor(BuildContext context) =>
+      Theme.of(context).colorScheme.primary;
+  static Color backgroundColor(BuildContext context) =>
+      _colors(context).background;
+  static Color cardColor(BuildContext context) => _colors(context).surface;
+  static Color elevatedSurfaceColor(BuildContext context) =>
+      _colors(context).elevatedSurface;
+  static Color surfaceElevatedColor(BuildContext context) =>
+      elevatedSurfaceColor(context);
+  static Color cardBorderColor(BuildContext context) => _colors(context).border;
+  static Color primaryTextColor(BuildContext context) =>
+      _colors(context).primaryText;
+  static Color secondaryTextColor(BuildContext context) =>
+      _colors(context).secondaryText;
+  static Color tertiaryTextColor(BuildContext context) =>
+      _colors(context).tertiaryText;
+  static Color inputFillColor(BuildContext context) =>
+      _colors(context).elevatedSurface;
+  static Color surfaceMutedColor(BuildContext context) =>
+      _colors(context).surface;
+  static bool isDark(BuildContext context) => true;
+  static Color nearGlowColor(BuildContext context) => _colors(context).nearGlow;
+  static Color ambientGlowColor(BuildContext context) =>
+      _colors(context).ambientGlow;
+  static Color materialEdgeColor(BuildContext context) => Color.lerp(
+        const Color(0xFF302A26),
+        const Color(0xFF27313C),
+        1 - sunlightStrength(context),
+      )!;
+  static Color metalHighlightColor(BuildContext context) => Color.lerp(
+        sunlightChampagne,
+        const Color(0xFFD8E1E8),
+        1 - sunlightStrength(context),
+      )!;
+  static Color glassSurfaceColor(BuildContext context) => Color.lerp(
+        const Color(0xFF171612),
+        const Color(0xB3141B25),
+        1 - sunlightStrength(context),
+      )!;
+  static Color selectedSurfaceColor(BuildContext context) => Color.lerp(
+        const Color(0xFF2A1C16),
+        const Color(0xFF1A222D),
+        1 - sunlightStrength(context),
+      )!;
+
+  static double sunlightStrength(BuildContext context) {
+    final blue = Theme.of(context).colorScheme.primary.blue.toDouble();
+    return (((moonlightAccent.blue - blue) /
+                (moonlightAccent.blue - primaryOrange.blue))
+            .clamp(0.0, 1.0))
+        .toDouble();
   }
 
-  static Color backgroundColor(BuildContext context) {
-    return isDark(context) ? darkBackground : lightBackground;
+  static double atmosphereValue(
+    BuildContext context, {
+    required double sunlight,
+    required double moonlight,
+  }) {
+    final warmth = sunlightStrength(context);
+    return moonlight + ((sunlight - moonlight) * warmth);
   }
 
-  static Color cardColor(BuildContext context) {
-    return isDark(context) ? darkSurface : lightSurface;
+  static LinearGradient premiumSurfaceGradient(BuildContext context) {
+    final palette = _colors(context);
+    final warmth = sunlightStrength(context);
+    final highlight = metalHighlightColor(context);
+    return LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        Color.lerp(palette.surface, highlight, 0.025 + (0.015 * warmth))!,
+        palette.surface,
+        Color.lerp(palette.surface, palette.background, 0.22 + (0.10 * warmth))!,
+      ],
+      stops: const [0, 0.26, 1],
+    );
   }
 
-  static Color elevatedSurfaceColor(BuildContext context) {
-    return isDark(context) ? darkSurfaceElevated : lightSurfaceElevated;
+  static LinearGradient raisedSurfaceGradient(BuildContext context) {
+    final palette = _colors(context);
+    final highlight = metalHighlightColor(context);
+    return LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        Color.lerp(palette.elevatedSurface, highlight, 0.035)!,
+        palette.elevatedSurface,
+        Color.lerp(palette.elevatedSurface, palette.background, 0.18)!,
+      ],
+      stops: const [0, 0.22, 1],
+    );
   }
 
-  static Color surfaceElevatedColor(BuildContext context) {
-    return elevatedSurfaceColor(context);
+  static LinearGradient atmosphereGradient(BuildContext context) {
+    final palette = _colors(context);
+    final warmth = sunlightStrength(context);
+    return LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        palette.nearGlow.withValues(alpha: 0.065 - (0.04 * warmth)),
+        palette.elevatedSurface.withValues(alpha: 0.88 + (0.06 * warmth)),
+        palette.background,
+        palette.ambientGlow.withValues(alpha: 0.04 - (0.025 * warmth)),
+      ],
+      stops: const [0, 0.10, 0.42, 1],
+    );
   }
 
-  static Color cardBorderColor(BuildContext context) {
-    return isDark(context) ? darkBorder : lightBorder;
-  }
+  static BreakpointThemeExtension _colors(BuildContext context) =>
+      Theme.of(context).extension<BreakpointThemeExtension>() ?? colors(0);
 
-  static Color primaryTextColor(BuildContext context) {
-    return isDark(context) ? darkPrimaryText : lightPrimaryText;
-  }
-
-  static Color secondaryTextColor(BuildContext context) {
-    return isDark(context) ? darkSecondaryText : lightSecondaryText;
-  }
-
-  static Color tertiaryTextColor(BuildContext context) {
-    return isDark(context) ? darkTertiaryText : lightTertiaryText;
-  }
-
-  static Color inputFillColor(BuildContext context) {
-    return isDark(context) ? darkSurfaceElevated : lightSurfaceElevated;
-  }
-
-  static Color surfaceMutedColor(BuildContext context) {
-    return isDark(context) ? darkSurface : lightSurface;
-  }
-
-  // ── DARK THEME DEFINITION ────────────────────────────────────────────────
-  static ThemeData get darkTheme {
+  static ThemeData themeFor(double coolFactor) {
+    final palette = colors(coolFactor);
+    final accent = Color.lerp(primaryOrange, moonlightAccent, coolFactor)!;
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: darkBackground,
-      colorScheme: const ColorScheme.dark(
-        primary: primaryOrange,
-        secondary: secondaryOrange,
-        surface: darkSurface,
-        onSurface: darkPrimaryText,
-        outline: darkBorder,
+      scaffoldBackgroundColor: palette.background,
+      colorScheme: ColorScheme.dark(
+        primary: accent,
+        secondary: accent,
+        surface: palette.surface,
+        onSurface: palette.primaryText,
+        outline: palette.border,
       ),
+      extensions: [palette],
       fontFamily: 'Inter',
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: false,
-        iconTheme: IconThemeData(color: darkPrimaryText),
+        iconTheme: IconThemeData(color: palette.primaryText),
         titleTextStyle: TextStyle(
-          color: darkPrimaryText,
+          color: palette.primaryText,
           fontSize: 26,
           fontWeight: FontWeight.w800,
-          fontFamily: 'Outfit',
+          fontFamily: 'Sora',
           letterSpacing: -0.4,
         ),
       ),
       cardTheme: CardThemeData(
-        color: darkSurface,
+        color: palette.surface,
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: darkBorder, width: 1),
+          side: BorderSide(color: palette.border),
         ),
       ),
-      textTheme: const TextTheme(
-        displayLarge: TextStyle(
-            fontSize: 34,
-            fontWeight: FontWeight.w900,
-            color: darkPrimaryText,
-            fontFamily: 'Outfit',
-            letterSpacing: -0.8),
-        displayMedium: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w800,
-            color: darkPrimaryText,
-            fontFamily: 'Outfit',
-            letterSpacing: -0.5),
-        titleLarge: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: darkPrimaryText,
-            fontFamily: 'Outfit',
-            letterSpacing: -0.4),
-        titleMedium: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: darkPrimaryText,
-            fontFamily: 'Outfit',
-            letterSpacing: -0.2),
-        bodyLarge: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.normal,
-            color: darkPrimaryText,
-            fontFamily: 'Inter',
+      textTheme: TextTheme(
+        displayLarge: _text(34, FontWeight.w900, palette.primaryText, 'Sora'),
+        displayMedium: _text(28, FontWeight.w800, palette.primaryText, 'Sora'),
+        titleLarge: _text(22, FontWeight.w700, palette.primaryText, 'Sora'),
+        titleMedium: _text(18, FontWeight.w600, palette.primaryText, 'Sora'),
+        bodyLarge: _text(16, FontWeight.normal, palette.primaryText, 'Inter',
             height: 1.45),
-        bodyMedium: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.normal,
-            color: darkSecondaryText,
-            fontFamily: 'Inter',
+        bodyMedium: _text(14, FontWeight.normal, palette.secondaryText, 'Inter',
             height: 1.4),
-        labelLarge: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: darkPrimaryText,
-            fontFamily: 'Inter'),
-        labelSmall: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: darkSecondaryText,
-            fontFamily: 'Inter'),
+        labelLarge: _text(14, FontWeight.w600, palette.primaryText, 'Inter'),
+        labelSmall: _text(12, FontWeight.w500, palette.secondaryText, 'Inter'),
       ),
-      dividerTheme: const DividerThemeData(
-        color: darkBorder,
-        thickness: 1,
-        space: 1,
-      ),
+      dividerTheme:
+          DividerThemeData(color: palette.border, thickness: 1, space: 1),
     );
   }
 
-  // ── LIGHT THEME DEFINITION ───────────────────────────────────────────────
-  static ThemeData get lightTheme {
-    return ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.light,
-      scaffoldBackgroundColor: lightBackground,
-      colorScheme: const ColorScheme.light(
-        primary: primaryOrange,
-        secondary: secondaryOrange,
-        surface: lightSurface,
-        onSurface: lightPrimaryText,
-        outline: lightBorder,
-      ),
-      fontFamily: 'Inter',
-      appBarTheme: const AppBarTheme(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: false,
-        iconTheme: IconThemeData(color: lightPrimaryText),
-        titleTextStyle: TextStyle(
-          color: lightPrimaryText,
-          fontSize: 26,
-          fontWeight: FontWeight.w800,
-          fontFamily: 'Outfit',
-          letterSpacing: -0.4,
-        ),
-      ),
-      cardTheme: CardThemeData(
-        color: lightSurface,
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: lightBorder, width: 1),
-        ),
-      ),
-      textTheme: const TextTheme(
-        displayLarge: TextStyle(
-            fontSize: 34,
-            fontWeight: FontWeight.w900,
-            color: lightPrimaryText,
-            fontFamily: 'Outfit',
-            letterSpacing: -0.8),
-        displayMedium: TextStyle(
-            fontSize: 28,
-            fontWeight: FontWeight.w800,
-            color: lightPrimaryText,
-            fontFamily: 'Outfit',
-            letterSpacing: -0.5),
-        titleLarge: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w700,
-            color: lightPrimaryText,
-            fontFamily: 'Outfit',
-            letterSpacing: -0.4),
-        titleMedium: TextStyle(
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-            color: lightPrimaryText,
-            fontFamily: 'Outfit',
-            letterSpacing: -0.2),
-        bodyLarge: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.normal,
-            color: lightPrimaryText,
-            fontFamily: 'Inter',
-            height: 1.45),
-        bodyMedium: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.normal,
-            color: lightSecondaryText,
-            fontFamily: 'Inter',
-            height: 1.4),
-        labelLarge: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-            color: lightPrimaryText,
-            fontFamily: 'Inter'),
-        labelSmall: TextStyle(
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-            color: lightSecondaryText,
-            fontFamily: 'Inter'),
-      ),
-      dividerTheme: const DividerThemeData(
-        color: lightBorder,
-        thickness: 1,
-        space: 1,
-      ),
-    );
-  }
+  static TextStyle _text(
+          double size, FontWeight weight, Color color, String family,
+          {double? height}) =>
+      TextStyle(
+        fontSize: size,
+        fontWeight: weight,
+        color: color,
+        fontFamily: family,
+        height: height,
+      );
+
+  static ThemeData get darkTheme => themeFor(0);
+
+  // Compatibility alias for older widget tests. It is still dark-only.
+  static ThemeData get lightTheme => darkTheme;
 }

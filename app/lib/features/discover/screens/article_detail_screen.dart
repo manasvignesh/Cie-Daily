@@ -241,28 +241,22 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
                     ),
                     const SizedBox(height: 20),
 
-                    // 2. IN 20 SECONDS SUMMARY
-                    if (structuredData.in20SecondsSummary.isNotEmpty) ...[
-                      In20SecondsCard(text: structuredData.in20SecondsSummary),
-                      const SizedBox(height: 20),
-                    ],
-
-                    // 3. KEY NUMBERS
+                    // 2. KEY NUMBERS
                     KeyNumbersRow(numbers: structuredData.keyNumbers),
                     const SizedBox(height: 20),
 
-                    // 4. WHY THIS MATTERS
+                    // 3. WHY THIS MATTERS
                     if (structuredData.whyItMatters.isNotEmpty) ...[
                       WhyThisMattersSection(text: structuredData.whyItMatters),
                       const SizedBox(height: 20),
                     ],
 
-                    // 5. EXPLORE THE STORY
+                    // 4. EXPLORE THE STORY
                     ExploreTheStorySection(
                         items: structuredData.exploreSections),
                     const SizedBox(height: 20),
 
-                    // 6. QUOTE
+                    // 5. QUOTE
                     if (structuredData.quoteText != null) ...[
                       EditorialQuoteWidget(
                         quote: structuredData.quoteText!,
@@ -272,7 +266,7 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
                       const SizedBox(height: 20),
                     ],
 
-                    // 7. YOU NOW KNOW
+                    // 6. YOU NOW KNOW
                     if (structuredData.takeaways.isNotEmpty)
                       YouNowKnowWidget(takeaways: structuredData.takeaways),
                     const SizedBox(height: 28),
@@ -282,7 +276,7 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
             ),
           ),
 
-          // 8. STICKY BOTTOM ACTION BAR
+          // 7. STICKY BOTTOM ACTION BAR
           ArticleBottomActionBar(
             isSaved: isSaved,
             isFollowing: isFollowing,

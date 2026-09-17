@@ -21,13 +21,32 @@ class AuthRepository {
 
   User? get currentUser => _firebaseAuth.currentUser;
 
+  Future<User> waitForAuthenticatedUser() async {
+    var user = _firebaseAuth.currentUser;
+    user ??= await authStateChanges
+        .firstWhere((candidate) => candidate != null)
+        .timeout(const Duration(seconds: 15));
+    if (user == null) {
+      throw FirebaseAuthException(code: 'unauthenticated');
+    }
+
+    await user.reload();
+    user = _firebaseAuth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(code: 'unauthenticated');
+    }
+    await user.getIdToken();
+    return user;
+  }
+
   Future<void> signInWithEmailAndPassword(String email, String password) async {
     try {
       final cred = await _firebaseAuth
           .signInWithEmailAndPassword(email: email, password: password)
           .timeout(const Duration(seconds: 15));
       if (cred.user != null) {
-        unawaited(FirebaseUserRepository(_firestore).ensureConnectionCode(cred.user!.uid));
+        unawaited(FirebaseUserRepository(_firestore)
+            .ensureConnectionCode(cred.user!.uid));
       }
     } catch (error, stackTrace) {
       throw ErrorMapper.normalize(error, stackTrace: stackTrace);
@@ -40,7 +59,8 @@ class AuthRepository {
           .createUserWithEmailAndPassword(email: email, password: password)
           .timeout(const Duration(seconds: 15));
       if (cred.user != null) {
-        unawaited(FirebaseUserRepository(_firestore).ensureConnectionCode(cred.user!.uid));
+        unawaited(FirebaseUserRepository(_firestore)
+            .ensureConnectionCode(cred.user!.uid));
       }
     } catch (error, stackTrace) {
       throw ErrorMapper.normalize(error, stackTrace: stackTrace);
@@ -67,7 +87,8 @@ class AuthRepository {
             .signInWithCredential(credential)
             .timeout(const Duration(seconds: 15));
         if (cred.user != null) {
-          unawaited(FirebaseUserRepository(_firestore).ensureConnectionCode(cred.user!.uid));
+          unawaited(FirebaseUserRepository(_firestore)
+              .ensureConnectionCode(cred.user!.uid));
         }
       }
     } catch (e, stackTrace) {

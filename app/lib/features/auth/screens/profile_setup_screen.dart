@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../../user/data/firebase_user_repository.dart';
+import '../data/auth_repository.dart';
 import '../providers/auth_provider.dart';
 import '../../../core/widgets/buttons/primary_button.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../core/errors/app_exception.dart';
 import '../../../core/errors/error_mapper.dart';
 
 class ProfileSetupScreen extends ConsumerStatefulWidget {
@@ -53,13 +53,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       _formError = null;
     });
     try {
-      final user = ref.read(authStateProvider).value;
-      if (user == null) {
-        throw const AppException(
-          code: AppErrorCode.unauthenticated,
-          userMessage: 'Your session has expired. Sign in again to continue.',
-        );
-      }
+      final user =
+          await ref.read(authRepositoryProvider).waitForAuthenticatedUser();
       await ref.read(userRepositoryProvider).createUserProfile(
             uid: user.uid,
             email: user.email ?? '',
@@ -85,7 +80,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     final primaryTextColor = AppTheme.primaryTextColor(context);
     final secondaryTextColor = AppTheme.secondaryTextColor(context);
     final borderColor = AppTheme.cardBorderColor(context);
-    final inputFill = isDark ? const Color(0xFF1C1C28) : const Color(0xFFF2F2F7);
+    final inputFill =
+        isDark ? const Color(0xFF1C1C28) : const Color(0xFFF2F2F7);
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -93,7 +89,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
         child: Center(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -150,7 +147,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                     border: Border.all(color: borderColor, width: 1),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
+                        color:
+                            Colors.black.withValues(alpha: isDark ? 0.3 : 0.04),
                         blurRadius: 24,
                         offset: const Offset(0, 10),
                       ),
@@ -171,7 +169,6 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                         inputFill: inputFill,
                       ),
                       const SizedBox(height: 20),
-
                       _buildFieldLabel('Department', primaryTextColor),
                       const SizedBox(height: 8),
                       _buildTextField(
@@ -184,7 +181,6 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                         inputFill: inputFill,
                       ),
                       const SizedBox(height: 20),
-
                       _buildFieldLabel('Year of Study (1–4)', primaryTextColor),
                       const SizedBox(height: 8),
                       _buildTextField(
@@ -259,7 +255,8 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
-      style: TextStyle(color: primaryTextColor, fontSize: 15, fontFamily: 'Inter'),
+      style:
+          TextStyle(color: primaryTextColor, fontSize: 15, fontFamily: 'Inter'),
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: TextStyle(

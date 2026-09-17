@@ -29,6 +29,10 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+configurations.configureEach {
+    exclude(group = "com.github.paramsen", module = "noise")
+}
+
 android {
     namespace = "com.ciedaily.app"
     compileSdk = 36
@@ -76,4 +80,8 @@ kotlin {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation("com.google.android.play:app-update:2.1.0")
 }
