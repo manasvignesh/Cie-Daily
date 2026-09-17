@@ -1,0 +1,10 @@
+{
+  "file": "out/breakpoint_launch_master_1080x1920_60fps.mp4",
+  "frames": 1740,
+  "width": 1080,
+  "height": 1920,
+  "fps": 60,
+  "durationSeconds": 29,
+  "consecutiveTimestamps": true,
+  "sha256": "f2ab29e3978bf4290743ecc654cbfe3881e4b7d9c2c92886cdbe9378ab90f0d7"
+}

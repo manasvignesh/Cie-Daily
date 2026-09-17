@@ -142,7 +142,7 @@ class AppTheme {
       )!;
   static Color glassSurfaceColor(BuildContext context) => Color.lerp(
         const Color(0xFF171612),
-        const Color(0xB3141B25),
+        const Color(0xFF111720),
         1 - sunlightStrength(context),
       )!;
   static Color selectedSurfaceColor(BuildContext context) => Color.lerp(

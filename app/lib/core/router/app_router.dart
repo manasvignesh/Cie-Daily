@@ -18,6 +18,9 @@ import '../../features/discover/screens/article_detail_screen.dart';
 import '../../features/feed/models/post_model.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/profile/screens/profile_screen.dart';
+import '../../features/profile/screens/connect_link_screen.dart';
+import '../../features/lists/screens/lists_screen.dart';
+import '../../features/lists/screens/article_list_detail_screen.dart';
 import '../../features/chat/screens/chat_list_screen.dart';
 import '../../features/chat/screens/individual_chat_screen.dart';
 import '../../features/chat/screens/group_chat_screen.dart';
@@ -91,6 +94,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     redirect: (context, state) {
       final isLoggingIn = state.matchedLocation == '/login';
+      final redirectTarget = state.uri.queryParameters['redirect'];
+      final currentDestination = Uri.encodeComponent(state.uri.toString());
 
       switch (authStatus) {
         case AuthStatus.initial:
@@ -98,7 +103,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return '/';
         case AuthStatus.unauthenticated:
           if (state.matchedLocation == '/') return null;
-          return isLoggingIn ? null : '/login';
+          return isLoggingIn ? null : '/login?redirect=$currentDestination';
         case AuthStatus.authenticatedAdmin:
           if (isLoggingIn) return '/admin/dashboard';
           if (state.matchedLocation == '/') return null;
@@ -107,12 +112,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           }
           return '/admin/dashboard';
         case AuthStatus.profileIncomplete:
-          if (isLoggingIn) return '/profile_setup';
+          if (isLoggingIn) {
+            return '/profile_setup${redirectTarget == null ? '' : '?redirect=${Uri.encodeComponent(redirectTarget)}'}';
+          }
           if (state.matchedLocation == '/') return null;
-          return '/profile_setup';
+          if (state.matchedLocation == '/profile_setup') return null;
+          return '/profile_setup?redirect=$currentDestination';
         case AuthStatus.authenticatedStudent:
           if (isLoggingIn || state.matchedLocation == '/profile_setup') {
-            return '/home';
+            return redirectTarget != null && redirectTarget.startsWith('/')
+                ? redirectTarget
+                : '/home';
           }
           if (state.matchedLocation == '/') return null;
           return null;
@@ -180,6 +190,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return ArticleDetailScreen(
               articleId: articleId, initialArticle: article);
         },
+      ),
+      GoRoute(
+        path: '/list/:id',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => ArticleListDetailScreen(
+          listId: state.pathParameters['id']!,
+        ),
+      ),
+      GoRoute(
+        path: '/connect/:token',
+        parentNavigatorKey: _rootNavigatorKey,
+        builder: (context, state) => ConnectLinkScreen(
+          connectionCode: state.pathParameters['token']!,
+        ),
       ),
       GoRoute(
         path: '/article_detail',
@@ -297,6 +321,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const ProfileScreen(),
           ),
           GoRoute(
+            path: '/lists',
+            builder: (context, state) => const ListsScreen(),
+          ),
+          GoRoute(
             path: '/notifications',
             builder: (context, state) => const NotificationsScreen(),
           ),
@@ -343,6 +371,7 @@ class _MainSwipeShellState extends State<MainSwipeShell> {
     if (loc.startsWith('/spaces')) return 2;
     if (loc.startsWith('/chat')) return 3;
     if (loc.startsWith('/profile')) return 4;
+    if (loc.startsWith('/lists')) return 4;
     return 0;
   }
 

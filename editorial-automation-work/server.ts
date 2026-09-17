@@ -1,0 +1,600 @@
+import "dotenv/config";
+import express, { type Request, type Response } from "express";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { timingSafeEqual } from "node:crypto";
+import {
+  initializeApp,
+  applicationDefault,
+  cert,
+  getApps,
+} from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue, getFirestore } from "firebase-admin/firestore";
+import { AccessToken } from "livekit-server-sdk";
+import OpenAI from "openai";
+import {
+  EditorialError,
+  EditorialService,
+  sourceText,
+  type EditorialQueueItem,
+  type EditorialStore,
+  type IngestStory,
+} from "./src/lib/editorial-automation.ts";
+import type { Article } from "./src/lib/types.ts";
+
+const projectId =
+  process.env.FIREBASE_PROJECT_ID ||
+  process.env.VITE_FIREBASE_PROJECT_ID ||
+  "cie-connect";
+let firebaseAdminInitializationError: unknown;
+function ensureFirebaseAdmin() {
+  if (getApps().length) return;
+  try {
+    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    initializeApp(
+      raw
+        ? { credential: cert(JSON.parse(raw)), projectId }
+        : { credential: applicationDefault(), projectId },
+    );
+    firebaseAdminInitializationError = undefined;
+  } catch (error) {
+    firebaseAdminInitializationError = error;
+    console.error("[firebase-admin] initialization failed", error);
+    throw error;
+  }
+}
+try { ensureFirebaseAdmin(); } catch { /* Keep the API alive to return JSON diagnostics. */ }
+const app = express();
+app.use(express.json({ limit: "4mb" }));
+
+type VerifiedUser = { uid: string; email?: string; name?: string };
+type AuthedRequest = Request & {
+  firebaseUser?: VerifiedUser;
+  idToken?: string;
+};
+function bearer(req: Request) {
+  const h = req.headers.authorization || "";
+  return h.startsWith("Bearer ") ? h.slice(7).trim() : "";
+}
+async function requireAuth(
+  req: AuthedRequest,
+  res: Response,
+  next: () => void,
+) {
+  const token = bearer(req);
+  if (!token) return void res.status(401).json({ error: "unauthenticated" });
+  try {
+    ensureFirebaseAdmin();
+    const decoded = await getAuth().verifyIdToken(token, true);
+    req.firebaseUser = {
+      uid: decoded.uid,
+      email: decoded.email,
+      name: decoded.name,
+    };
+  } catch {
+    // Local Studio installations may not have Application Default Credentials.
+    // Identity Toolkit validates the same Firebase ID token without trusting
+    // client-provided identity fields.
+    const apiKey = process.env.VITE_FIREBASE_API_KEY;
+    if (!apiKey)
+      return void res
+        .status(503)
+        .json({ error: "firebase_auth_not_configured" });
+    try {
+      const response = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${encodeURIComponent(apiKey)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idToken: token }),
+        },
+      );
+      const body: any = await response.json();
+      const account = body.users?.[0];
+      if (!response.ok || !account?.localId)
+        return void res.status(401).json({ error: "invalid_auth" });
+      req.firebaseUser = {
+        uid: account.localId,
+        email: account.email,
+        name: account.displayName,
+      };
+    } catch {
+      return void res.status(503).json({ error: "firebase_auth_unreachable" });
+    }
+  }
+  req.idToken = token;
+  next();
+}
+function decodeValue(v: any): any {
+  if (!v || typeof v !== "object") return v;
+  if ("stringValue" in v) return v.stringValue;
+  if ("booleanValue" in v) return v.booleanValue;
+  if ("integerValue" in v) return Number(v.integerValue);
+  if ("doubleValue" in v) return Number(v.doubleValue);
+  if ("timestampValue" in v) return v.timestampValue;
+  if ("nullValue" in v) return null;
+  if ("arrayValue" in v) return (v.arrayValue.values || []).map(decodeValue);
+  if ("mapValue" in v)
+    return Object.fromEntries(
+      Object.entries(v.mapValue.fields || {}).map(([k, x]) => [
+        k,
+        decodeValue(x),
+      ]),
+    );
+  return undefined;
+}
+async function readDocument(collection: string, id: string, idToken: string) {
+  const url = `https://firestore.googleapis.com/v1/projects/${encodeURIComponent(projectId)}/databases/(default)/documents/${collection}/${encodeURIComponent(id)}`;
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${idToken}` },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`firestore_${response.status}`);
+  const json: any = await response.json();
+  return Object.fromEntries(
+    Object.entries(json.fields || {}).map(([k, v]) => [k, decodeValue(v)]),
+  );
+}
+const staffRoles = new Set([
+  "admin",
+  "editor",
+  "author",
+  "moderator",
+  "creator",
+]);
+async function requireStaff(
+  req: AuthedRequest,
+  res: Response,
+  next: () => void,
+) {
+  try {
+    const profile = await readDocument(
+      "users",
+      req.firebaseUser!.uid,
+      req.idToken!,
+    );
+    const role = String(profile?.role || "").toLowerCase();
+    if (
+      !staffRoles.has(role) &&
+      req.firebaseUser!.email !== "manasvig43@gmail.com"
+    )
+      return void res.status(403).json({ error: "staff_required" });
+    next();
+  } catch {
+    return void res.status(503).json({ error: "identity_check_failed" });
+  }
+}
+
+app.get("/api/health", (_req, res) =>
+  res.json({
+    ok: true,
+    firebase: { projectId, auth: true },
+    ai: {
+      configured: !!process.env.NVIDIA_API_KEY,
+      editorialProvider: process.env.NVIDIA_API_KEY ? "nvidia" : "not_configured",
+    },
+    livekit: {
+      configured: !!(
+        process.env.LIVEKIT_API_KEY &&
+        process.env.LIVEKIT_API_SECRET &&
+        (process.env.LIVEKIT_URL || process.env.VITE_LIVEKIT_URL)
+      ),
+    },
+  }),
+);
+
+const prompt = `You are the editorial engine for CIE Daily. Structure only the supplied reporting; do not add outside knowledge. Never invent or alter numbers, dates, names, locations, quotes, company names, capacities, targets, or statistics. If a detail is absent, omit it. Return strict JSON with exactly two independent representations: quick_brief and full_article. quick_brief has category, headline, quick_summary (35-60 words), three_things_to_know (exactly 3 concise facts), key_number ({value,label} or null). full_article has headline, hook, in_20_seconds, what_happened (60+ words), why_this_matters (50+ words), bigger_picture, key_stats (array of {value,label}), explore_sections (3-6 story-specific sections, each with title, summary, content, items [{title,description}]), takeaways (3-5), quote ({text,speaker,role} or null). Do not copy the brief into the full article. Output JSON only.`;
+
+function parseGeneratedArticle(raw: string) {
+  const cleaned = raw
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "")
+    .trim();
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start < 0 || end <= start) throw new Error("invalid_generated_json");
+  const article = JSON.parse(cleaned.slice(start, end + 1));
+  if (!article?.quick_brief || !article?.full_article) {
+    throw new Error("generated_schema_missing");
+  }
+  return article as Pick<Article, "quick_brief" | "full_article">;
+}
+
+async function generateArticle(
+  source: string,
+  category: string,
+  validationFeedback: string[] = [],
+) {
+  const apiKey = process.env.NVIDIA_API_KEY;
+  if (!apiKey) throw new Error("ai_not_configured");
+  const ai = new OpenAI({
+    apiKey,
+    baseURL: process.env.AI_BASE_URL || "https://integrate.api.nvidia.com/v1",
+  });
+  const retryNote = validationFeedback.length
+    ? `\nThe previous output failed these checks. Correct them without adding facts:\n- ${validationFeedback.join("\n- ")}`
+    : "";
+  const result = await ai.chat.completions.create({
+    model: process.env.AI_MODEL || "meta/llama-3.2-11b-vision-instruct",
+    temperature: 0.1,
+    max_tokens: 5000,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: prompt },
+      {
+        role: "user",
+        content: `Category: ${category}\nSource reporting:\n${source}${retryNote}`,
+      },
+    ],
+  });
+  const text = result.choices[0]?.message?.content;
+  if (!text) throw new Error("empty_ai_response");
+  return parseGeneratedArticle(text);
+}
+app.post(
+  "/api/generate-article",
+  requireAuth,
+  requireStaff,
+  async (req: AuthedRequest, res) => {
+    const source = String(req.body?.sourceText || "").trim();
+    if (source.length < 80)
+      return res.status(400).json({ error: "source_too_short" });
+    if (!process.env.NVIDIA_API_KEY)
+      return res.status(503).json({ error: "ai_not_configured" });
+    try {
+      const article = await generateArticle(
+        source,
+        String(req.body?.category || "General"),
+      );
+      return res.json({ article });
+    } catch (error: any) {
+      return res
+        .status(502)
+        .json({
+          error: "generation_failed",
+          detail: error?.message?.slice(0, 160) || "unknown",
+        });
+    }
+  },
+);
+
+function configuredDomains() {
+  return (process.env.EDITORIAL_DOMAINS ||
+    "Technology,Startups,AI & ML,Science,Engineering,India,Business")
+    .split(",")
+    .map((domain) => domain.trim())
+    .filter(Boolean);
+}
+
+function queueItem(id: string, data: Record<string, any>): EditorialQueueItem {
+  const timestamp = (value: any) => value?.toDate?.().toISOString?.() || value || null;
+  return {
+    id,
+    ...data,
+    receivedAt: timestamp(data.receivedAt),
+    updatedAt: timestamp(data.updatedAt),
+    publishedAt: timestamp(data.publishedAt),
+  } as EditorialQueueItem;
+}
+
+const firestoreEditorialStore: EditorialStore = {
+  async listRecent(max = 100) {
+    const snapshot = await getFirestore()
+      .collection("editorial_queue")
+      .orderBy("receivedAt", "desc")
+      .limit(max)
+      .get();
+    return snapshot.docs.map((document) => queueItem(document.id, document.data()));
+  },
+  async create(item) {
+    const reference = await getFirestore().collection("editorial_queue").add({
+      ...item,
+      receivedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    console.info("[editorial] story received", { queueId: reference.id });
+    return { id: reference.id, ...item };
+  },
+  async get(id) {
+    const document = await getFirestore().collection("editorial_queue").doc(id).get();
+    return document.exists ? queueItem(document.id, document.data()!) : null;
+  },
+  async update(id, patch) {
+    await getFirestore().collection("editorial_queue").doc(id).update({
+      ...patch,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    if (patch.duplicate) console.info("[editorial] duplicate detected", { queueId: id, kind: patch.duplicate.kind });
+    if (patch.status === "processing") console.info("[editorial] generation started", { queueId: id });
+    if (patch.status === "ready_for_review") console.info("[editorial] generation succeeded", { queueId: id });
+    if (patch.status === "failed") console.warn("[editorial] validation or generation failed", { queueId: id });
+  },
+  async publish(queueId, post) {
+    const db = getFirestore();
+    const queueReference = db.collection("editorial_queue").doc(queueId);
+    const postReference = db.collection("posts").doc();
+    await db.runTransaction(async (transaction) => {
+      const queue = await transaction.get(queueReference);
+      if (!queue.exists) throw new EditorialError("not_found", "Editorial item not found.", 404);
+      if (queue.data()?.status !== "approved") {
+        throw new EditorialError("publish_conflict", "Editorial approval changed. Reload and try again.", 409);
+      }
+      transaction.set(postReference, {
+        ...post,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        publishedAt: FieldValue.serverTimestamp(),
+      });
+      transaction.update(queueReference, {
+        status: "published",
+        publishedArticleId: postReference.id,
+        publishedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        failureReason: null,
+      });
+    });
+    console.info("[editorial] publish succeeded", { queueId, articleId: postReference.id });
+    return postReference.id;
+  },
+};
+
+const editorialService = new EditorialService(
+  firestoreEditorialStore,
+  (story: IngestStory, feedback?: string[]) =>
+    generateArticle(sourceText(story), story.domain, feedback),
+  configuredDomains(),
+  2,
+);
+
+function secureTokenMatches(actual: string, expected: string) {
+  const left = Buffer.from(actual);
+  const right = Buffer.from(expected);
+  return left.length === right.length && timingSafeEqual(left, right);
+}
+
+const ingestBuckets = new Map<string, { count: number; resetAt: number }>();
+function requireIngestionSecret(req: Request, res: Response, next: () => void) {
+  const configured = process.env.EDITORIAL_INGEST_SECRET || "";
+  if (!configured) return void res.status(503).json({ error: "ingestion_not_configured" });
+  const token = bearer(req);
+  if (!token || !secureTokenMatches(token, configured)) {
+    return void res.status(401).json({ error: "invalid_ingestion_token" });
+  }
+  const key = req.ip || "unknown";
+  const now = Date.now();
+  const current = ingestBuckets.get(key);
+  if (current && current.resetAt > now && current.count >= 30) {
+    return void res.status(429).json({ error: "rate_limited" });
+  }
+  ingestBuckets.set(key, current && current.resetAt > now
+    ? { ...current, count: current.count + 1 }
+    : { count: 1, resetAt: now + 60_000 });
+  next();
+}
+
+function editorialFailure(res: Response, error: unknown) {
+  if (error instanceof EditorialError) {
+    return res.status(error.status).json({ error: error.code, message: error.message });
+  }
+  const technicalMessage = error instanceof Error ? error.message : String(error);
+  const credentialsUnavailable = Boolean(firebaseAdminInitializationError) ||
+    /default credentials|credential|app\/no-app|service account/i.test(technicalMessage);
+  console.error("[editorial] request failed", error);
+  if (credentialsUnavailable) {
+    return res.status(503).json({
+      error: "editorial_service_unavailable",
+      message: "Editorial stories could not be loaded.",
+    });
+  }
+  return res.status(500).json({
+    error: "editorial_operation_failed",
+    message: "Editorial stories could not be loaded.",
+  });
+}
+
+app.post("/api/editorial-ingest", requireIngestionSecret, async (req, res) => {
+  const stories = Array.isArray(req.body?.stories) ? req.body.stories.slice(0, 10) : [req.body];
+  const results: Array<Record<string, unknown>> = [];
+  for (const story of stories) {
+    try {
+      const item = await editorialService.ingest(story);
+      if (item.duplicate) {
+        console.info("[editorial] duplicate detected", {
+          queueId: item.id,
+          kind: item.duplicate.kind,
+        });
+      }
+      results.push({ ok: true, id: item.id, status: item.status, duplicate: item.duplicate });
+    } catch (error) {
+      results.push({
+        ok: false,
+        error: error instanceof EditorialError ? error.code : "processing_failed",
+        message: error instanceof EditorialError ? error.message : "Story processing failed",
+      });
+    }
+  }
+  const single = !Array.isArray(req.body?.stories);
+  const failed = results.every((result) => result.ok === false);
+  return res.status(single && failed ? 400 : 201).json(single ? results[0] : { results });
+});
+
+app.get("/api/editorial", requireAuth, requireStaff, async (_req, res) => {
+  try {
+    return res.json({ items: await editorialService.list(), domains: editorialService.domains() });
+  } catch (error) {
+    return editorialFailure(res, error);
+  }
+});
+
+app.patch("/api/editorial/:id", requireAuth, requireStaff, async (req, res) => {
+  try {
+    return res.json({ item: await editorialService.edit(String(req.params.id), req.body?.generatedArticle) });
+  } catch (error) {
+    return editorialFailure(res, error);
+  }
+});
+
+app.post("/api/editorial/:id/regenerate", requireAuth, requireStaff, async (req, res) => {
+  try {
+    return res.json({ item: await editorialService.regenerate(String(req.params.id)) });
+  } catch (error) {
+    return editorialFailure(res, error);
+  }
+});
+
+app.post("/api/editorial/:id/reject", requireAuth, requireStaff, async (req, res) => {
+  try {
+    return res.json({ item: await editorialService.reject(String(req.params.id)) });
+  } catch (error) {
+    return editorialFailure(res, error);
+  }
+});
+
+app.post("/api/editorial/:id/publish", requireAuth, requireStaff, async (req: AuthedRequest, res) => {
+  try {
+    const user = req.firebaseUser!;
+    const queueId = String(req.params.id);
+    const item = await editorialService.publish(queueId, {
+      uid: user.uid,
+      name: user.name || user.email?.split("@")[0] || "Editor",
+      email: user.email || "",
+    });
+    return res.json({ item });
+  } catch (error) {
+    console.warn("[editorial] publish failed", { queueId: String(req.params.id) });
+    return editorialFailure(res, error);
+  }
+});
+
+const tokenBuckets = new Map<string, { count: number; reset: number }>();
+app.post("/api/livekit/token", requireAuth, async (req: AuthedRequest, res) => {
+  const uid = req.firebaseUser!.uid,
+    now = Date.now(),
+    bucket = tokenBuckets.get(uid);
+  if (bucket && bucket.reset > now && bucket.count >= 12)
+    return res.status(429).json({ error: "rate_limited" });
+  tokenBuckets.set(
+    uid,
+    bucket && bucket.reset > now
+      ? { ...bucket, count: bucket.count + 1 }
+      : { count: 1, reset: now + 60_000 },
+  );
+  const spaceId = String(req.body?.spaceId || ""),
+    roomName = String(req.body?.roomName || "");
+  if (
+    !/^[A-Za-z0-9_-]{1,128}$/.test(spaceId) ||
+    !/^[A-Za-z0-9_-]{1,128}$/.test(roomName)
+  )
+    return res.status(400).json({ error: "invalid_request" });
+  try {
+    const stream = await readDocument("liveStreams", spaceId, req.idToken!);
+    if (!stream) return res.status(404).json({ error: "stream_not_found" });
+    if (
+      String(stream.status).toLowerCase() !== "live" &&
+      String(stream.status).toLowerCase() !== "scheduled"
+    )
+      return res.status(409).json({ error: "stream_ended" });
+    const canonical = String(stream.roomName || "").trim();
+    if (!canonical || canonical !== roomName)
+      return res.status(403).json({ error: "room_mismatch" });
+    const presenters = [
+      stream.hostId,
+      stream.presenterId,
+      ...(stream.presenterIds || []),
+      ...(stream.coHostIds || []),
+      ...(stream.moderatorIds || []),
+    ];
+    const canPublish = presenters.includes(uid);
+    if (
+      stream.isPublic === false &&
+      !canPublish &&
+      !(stream.allowedUserIds || []).includes(uid)
+    )
+      return res.status(403).json({ error: "not_authorized" });
+    if (
+      [
+        ...(stream.bannedUserIds || []),
+        ...(stream.removedUserIds || []),
+      ].includes(uid)
+    )
+      return res.status(403).json({ error: "not_authorized" });
+    const key = process.env.LIVEKIT_API_KEY,
+      secret = process.env.LIVEKIT_API_SECRET,
+      url = process.env.LIVEKIT_URL || process.env.VITE_LIVEKIT_URL;
+    if (!key || !secret || !url)
+      return res.status(503).json({ error: "livekit_not_configured" });
+    const token = new AccessToken(key, secret, {
+      identity: uid,
+      name:
+        req.firebaseUser!.name || req.firebaseUser!.email || "CIE Daily user",
+      ttl: 300,
+    });
+    token.addGrant({
+      roomJoin: true,
+      room: canonical,
+      canSubscribe: true,
+      canPublish,
+      canPublishData: canPublish,
+    });
+    return res.json({
+      token: await token.toJwt(),
+      serverUrl: url,
+      roomName: canonical,
+      role: canPublish ? "presenter" : "listener",
+      expiresInSeconds: 300,
+    });
+  } catch (error: any) {
+    return res
+      .status(503)
+      .json({
+        error: "token_service_failed",
+        detail: error?.message?.slice(0, 120) || "unknown",
+      });
+  }
+});
+
+app.use("/api", (error: unknown, req: Request, res: Response, next: (error?: unknown) => void) => {
+  if (res.headersSent) return next(error);
+  console.error("[api] unhandled request failure", { method: req.method, path: req.originalUrl, error });
+  return res.status(500).json({
+    error: "service_unavailable",
+    message: "The requested service is temporarily unavailable.",
+  });
+});
+
+app.use("/api", (req, res) =>
+  res.status(404).json({
+    error: "api_route_not_found",
+    path: `${req.method} ${req.originalUrl}`,
+  }),
+);
+
+const port = Number(process.env.STUDIO_PORT || 3100);
+export default app;
+
+async function startServer() {
+if (process.env.NODE_ENV === "production") {
+  const root = path.dirname(fileURLToPath(import.meta.url));
+  app.use(express.static(path.join(root, "dist")));
+  app.get("/{*splat}", (_req, res) =>
+    res.sendFile(path.join(root, "dist", "index.html")),
+  );
+  app.listen(port, "127.0.0.1", () =>
+    console.log(`CIE Daily Studio listening on http://127.0.0.1:${port}`),
+  );
+} else {
+  const { createServer } = await import("vite");
+  const vite = await createServer({
+    server: { middlewareMode: true },
+    appType: "spa",
+  });
+  app.use(vite.middlewares);
+  app.listen(port, "127.0.0.1", () =>
+    console.log(`CIE Daily Studio listening on http://127.0.0.1:${port}`),
+  );
+}
+}
+
+if (!process.env.VERCEL) void startServer();

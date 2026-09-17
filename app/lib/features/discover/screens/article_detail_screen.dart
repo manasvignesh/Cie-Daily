@@ -5,15 +5,17 @@ import '../../../core/providers/language_provider.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../core/sharing/breakpoint_links.dart';
+import '../../../core/widgets/breakpoint_share_sheet.dart';
 import '../../feed/data/firebase_feed_repository.dart';
 import '../../feed/models/post_model.dart';
 import '../../feed/widgets/comments_bottom_sheet.dart';
-import '../../feed/widgets/in_app_share_bottom_sheet.dart';
 import '../../user/data/firebase_user_repository.dart';
 import '../models/structured_article_model.dart';
 import '../providers/discover_provider.dart';
 import '../widgets/article_components.dart';
 import '../widgets/language_picker_sheet.dart';
+import '../../lists/widgets/add_to_list_sheet.dart';
 
 class ArticleDetailScreen extends ConsumerStatefulWidget {
   final String? articleId;
@@ -59,6 +61,17 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
     });
     try {
       await ref.read(feedRepositoryProvider).toggleBookmark(article.id, next);
+      if (mounted && next) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Saved'),
+            action: SnackBarAction(
+              label: 'Add to List',
+              onPressed: () => showAddToListSheet(context, article.id),
+            ),
+          ),
+        );
+      }
     } catch (_) {
       if (mounted) setState(() => _isSaved = current);
     } finally {
@@ -101,8 +114,8 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
 
   Widget _buildArticleContent(BuildContext context, PostModel articlePost) {
     final selectedLanguage = ref.watch(contentLanguageProvider);
-    final structuredData =
-        StructuredArticleData.fromPostModel(articlePost, language: selectedLanguage);
+    final structuredData = StructuredArticleData.fromPostModel(articlePost,
+        language: selectedLanguage);
     final currentUserId = FirebaseAuth.instance.currentUser?.uid;
     final isSelf = currentUserId != null &&
         structuredData.authorId != null &&
@@ -113,10 +126,11 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
 
     final primaryText = AppTheme.primaryTextColor(context);
     final isSaved = _isSaved ?? articlePost.isBookmarkedByCurrentUser;
-    
+
     final availableLanguages = ['en'];
     articlePost.publishedArticle.languages.forEach((k, v) {
-      if (k != 'en' && v.translationStatus == 'ready') availableLanguages.add(k);
+      if (k != 'en' && v.translationStatus == 'ready')
+        availableLanguages.add(k);
     });
 
     return Scaffold(
@@ -151,7 +165,7 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
             ),
           ),
           IconButton(
-            onPressed: () => InAppShareBottomSheet.show(context, articlePost),
+            onPressed: () => _shareArticle(context, articlePost),
             tooltip: 'Share',
             icon: Icon(Icons.ios_share_rounded, color: primaryText),
           ),
@@ -160,7 +174,7 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
             tooltip: 'Options',
             onSelected: (value) {
               if (value == 'share') {
-                InAppShareBottomSheet.show(context, articlePost);
+                _shareArticle(context, articlePost);
               } else if (value == 'discuss') {
                 CommentsBottomSheet.show(context, articlePost.id);
               }
@@ -182,7 +196,7 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
                   children: [
                     Icon(Icons.send_rounded, size: 18),
                     SizedBox(width: 10),
-                    Text('Share with connections'),
+                    Text('Share story'),
                   ],
                 ),
               ),
@@ -282,7 +296,7 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
             isFollowing: isFollowing,
             onSave: () => _toggleSaved(articlePost),
             onDiscuss: () => CommentsBottomSheet.show(context, articlePost.id),
-            onShare: () => InAppShareBottomSheet.show(context, articlePost),
+            onShare: () => _shareArticle(context, articlePost),
             onFollow: () {
               if (currentUserId != null && structuredData.authorId != null) {
                 ref.read(userRepositoryProvider).toggleFollowUser(
@@ -295,6 +309,16 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  void _shareArticle(BuildContext context, PostModel article) {
+    BreakpointShareSheet.show(
+      context,
+      title: 'Share story',
+      url: BreakpointLinks.article(article.id),
+      shareText: 'Worth stopping for: ${article.title}',
+      qrInstruction: 'Scan to open this story in Breakpoint',
     );
   }
 
@@ -378,4 +402,3 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
     );
   }
 }
-

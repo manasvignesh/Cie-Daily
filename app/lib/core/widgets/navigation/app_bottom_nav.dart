@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 
@@ -62,104 +61,99 @@ class AppBottomNav extends StatelessWidget {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(26),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(items.length, (index) {
-                final item = items[index];
-                final isSelected = index == currentIndex;
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: List.generate(items.length, (index) {
+              final item = items[index];
+              final isSelected = index == currentIndex;
 
-                return Expanded(
-                  child: InkWell(
-                    onTap: () => onItemSelected(index),
-                    splashColor: Colors.transparent,
-                    highlightColor: Colors.transparent,
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Stack(
-                          alignment: Alignment.center,
-                          clipBehavior: Clip.none,
-                          children: [
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeOutCubic,
-                              width: 32,
-                              height: 32,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: isSelected
-                                    ? AppTheme.selectedSurfaceColor(context)
-                                    : Colors.transparent,
-                                boxShadow: isSelected
-                                    ? [
-                                        BoxShadow(
-                                          color: nearGlow.withValues(
-                                              alpha: 0.10),
-                                          blurRadius: 8,
-                                        ),
-                                      ]
-                                    : const [],
-                              ),
-                              child: AnimatedScale(
-                                scale: isSelected ? 1.06 : 1,
-                                duration: const Duration(milliseconds: 180),
-                                curve: Curves.easeOutCubic,
-                                child: Icon(
-                                  isSelected ? item.activeIcon : item.icon,
-                                  key: ValueKey('${item.label}_$isSelected'),
-                                  size: 22,
-                                  color:
-                                      isSelected ? activeColor : inactiveColor,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        // Breakpoint Marker Dot for Active Tab
-                        if (isSelected)
-                          TweenAnimationBuilder<double>(
-                            tween: Tween(begin: 0.55, end: 1),
-                            duration: const Duration(milliseconds: 220),
+              return Expanded(
+                child: InkWell(
+                  onTap: () => onItemSelected(index),
+                  splashColor: Colors.transparent,
+                  highlightColor: Colors.transparent,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Stack(
+                        alignment: Alignment.center,
+                        clipBehavior: Clip.none,
+                        children: [
+                          AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
                             curve: Curves.easeOutCubic,
-                            builder: (context, value, _) => Transform.scale(
-                              scale: value,
-                              child: Container(
-                                width: 4,
-                                height: 4,
-                                decoration: BoxDecoration(
-                                  color: activeColor,
-                                  shape: BoxShape.circle,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: nearGlow.withValues(
-                                        alpha: 0.20,
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isSelected
+                                  ? AppTheme.selectedSurfaceColor(context)
+                                  : Colors.transparent,
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: nearGlow.withValues(alpha: 0.10),
+                                        blurRadius: 8,
                                       ),
-                                      blurRadius: 6,
-                                    ),
-                                  ],
-                                ),
-                              ),
+                                    ]
+                                  : const [],
                             ),
-                          )
-                        else
-                          Text(
-                            item.label,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w500,
-                              color: inactiveColor,
-                              fontFamily: 'Inter',
+                            child: AnimatedScale(
+                              scale: isSelected ? 1.06 : 1,
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOutCubic,
+                              child: Icon(
+                                isSelected ? item.activeIcon : item.icon,
+                                key: ValueKey('${item.label}_$isSelected'),
+                                size: 22,
+                                color: isSelected ? activeColor : inactiveColor,
+                              ),
                             ),
                           ),
-                      ],
-                    ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      // Breakpoint Marker Dot for Active Tab
+                      if (isSelected)
+                        TweenAnimationBuilder<double>(
+                          tween: Tween(begin: 0.55, end: 1),
+                          duration: const Duration(milliseconds: 220),
+                          curve: Curves.easeOutCubic,
+                          builder: (context, value, _) => Transform.scale(
+                            scale: value,
+                            child: Container(
+                              width: 4,
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: activeColor,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: nearGlow.withValues(
+                                      alpha: 0.20,
+                                    ),
+                                    blurRadius: 6,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Text(
+                          item.label,
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w500,
+                            color: inactiveColor,
+                            fontFamily: 'Inter',
+                          ),
+                        ),
+                    ],
                   ),
-                );
-              }),
-            ),
+                ),
+              );
+            }),
           ),
         ),
       ),

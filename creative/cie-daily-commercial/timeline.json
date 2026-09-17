@@ -1,0 +1,40 @@
+{
+  "title": "CIE Daily — Signal",
+  "status": "preproduction_awaiting_video_tool_and_current_screen_recordings",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "durationFrames": 450,
+  "durationSeconds": 15,
+  "outPointsExclusive": true,
+  "shots": [
+    {"id": "problem_scroll", "in": 0, "out": 54},
+    {"id": "freeze", "in": 54, "out": 90},
+    {"id": "reveal", "in": 90, "out": 132},
+    {"id": "discover_swipes", "in": 132, "out": 210},
+    {"id": "swipe_deck", "in": 210, "out": 240},
+    {"id": "full_story", "in": 240, "out": 270},
+    {"id": "spaces", "in": 270, "out": 300},
+    {"id": "share", "in": 300, "out": 330},
+    {"id": "hero_arrival", "in": 330, "out": 354},
+    {"id": "brand", "in": 354, "out": 378},
+    {"id": "tagline", "in": 378, "out": 408},
+    {"id": "cta_hold", "in": 408, "out": 450}
+  ],
+  "overlays": [
+    {"in": 54, "out": 90, "text": "Too much noise?"},
+    {"in": 96, "out": 210, "text": "Discover what actually matters."},
+    {"in": 354, "out": 450, "text": "CIE Daily"},
+    {"in": 378, "out": 450, "text": "Stay curious. Stay ahead."},
+    {"in": 408, "out": 450, "text": "Download now"}
+  ],
+  "voiceover": {"in": 212, "out": 323, "text": "Tech. Ideas. People. One place."},
+  "soundCues": [
+    {"frame": 54, "cue": "short_bass_hit_and_scroll_stop"},
+    {"frame": 90, "cue": "music_opens"},
+    {"frame": 330, "cue": "music_simplifies"},
+    {"frame": 423, "cue": "subtle_original_logo_tone", "tailEndFrame": 450}
+  ],
+  "logoReference": "../../app/assets/icons/app_logo.png",
+  "autoPublish": false
+}

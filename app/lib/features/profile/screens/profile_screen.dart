@@ -15,6 +15,8 @@ import '../../../core/widgets/data_display/app_avatar.dart';
 import '../../chat/providers/chat_providers.dart';
 import '../../user/data/firebase_user_repository.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/sharing/breakpoint_links.dart';
+import '../../../core/widgets/breakpoint_share_sheet.dart';
 import '../../../core/widgets/breakpoint_logo.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/services/cloudinary_service.dart';
@@ -263,11 +265,14 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                         isSelf: isSelf,
                         viewedUid: viewedUid,
                         isFollowing: isFollowing,
+                        connectionCode: connectionCode,
                       ),
 
                       // ── 4. CONNECTION CODE CARD ────────────────────────────
                       if (isSelf)
                         _buildConnectionCodeCard(context, connectionCode),
+
+                      if (isSelf) _buildListsEntry(context),
 
                       // ── 5. INTERESTS & FOCUS AREAS CARD ───────────────────
                       _buildInterestsCard(
@@ -672,32 +677,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
               ],
             ),
           ),
-          Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(20),
-            child: InkWell(
-              borderRadius: BorderRadius.circular(20),
-              onTap: () {
-                Clipboard.setData(ClipboardData(text: connectionCode));
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Connection code copied to clipboard!'),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryOrange.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.copy_rounded,
-                  color: AppTheme.primaryOrange,
-                  size: 18,
-                ),
-              ),
+          IconButton(
+            tooltip: 'Copy code',
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: connectionCode));
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Connection code copied')),
+              );
+            },
+            icon: const Icon(Icons.copy_rounded, size: 19),
+          ),
+          IconButton(
+            tooltip: 'Show QR',
+            onPressed: () => BreakpointShareSheet.show(
+              context,
+              title: 'Connect on Breakpoint',
+              url: BreakpointLinks.connect(connectionCode),
+              shareText: 'Connect with me on Breakpoint',
+              qrInstruction: 'Scan to connect on Breakpoint',
+              connectionCode: connectionCode,
+            ),
+            icon: Icon(
+              Icons.qr_code_2_rounded,
+              color: AppTheme.accentColor(context),
             ),
           ),
         ],
@@ -796,6 +798,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     required bool isSelf,
     required String? viewedUid,
     required bool isFollowing,
+    required String connectionCode,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -820,7 +823,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 Expanded(
                   child: _ProfileActionBtn(
                     label: 'Share Profile',
-                    onTap: () => _shareProfile(context, name),
+                    onTap: () => _shareProfile(
+                      context,
+                      name,
+                      viewedUid ?? '',
+                      connectionCode,
+                    ),
                     filled: false,
                   ),
                 ),
@@ -868,7 +876,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                 Expanded(
                   child: _ProfileActionBtn(
                     label: 'Share Profile',
-                    onTap: () => _shareProfile(context, name),
+                    onTap: () => _shareProfile(
+                      context,
+                      name,
+                      viewedUid ?? '',
+                      connectionCode,
+                    ),
                     filled: false,
                   ),
                 ),
@@ -877,17 +890,46 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
     );
   }
 
-  void _shareProfile(BuildContext context, String displayName) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+  void _shareProfile(
+    BuildContext context,
+    String displayName,
+    String userId,
+    String connectionCode,
+  ) {
+    final handle = displayName.toLowerCase().replaceAll(' ', '_');
+    final connectable = connectionCode.trim().isNotEmpty;
+    BreakpointShareSheet.show(
+      context,
+      title: 'Share Profile',
+      url: connectable
+          ? BreakpointLinks.connect(connectionCode)
+          : BreakpointLinks.profile(userId),
+      shareText: 'Connect with @$handle on Breakpoint',
+      qrInstruction: connectable
+          ? 'Scan to connect on Breakpoint'
+          : 'Scan to open this profile in Breakpoint',
+      connectionCode: connectable ? connectionCode : null,
+    );
+  }
 
-    Clipboard.setData(ClipboardData(
-        text: 'Check out $displayName on Breakpoint! Email: ${user.email}'));
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Profile details copied to clipboard!'),
-        behavior: SnackBarBehavior.floating,
+  Widget _buildListsEntry(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Material(
+        color: AppTheme.cardColor(context),
+        borderRadius: BorderRadius.circular(16),
+        child: ListTile(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          leading: Icon(Icons.list_alt_rounded,
+              color: AppTheme.accentColor(context)),
+          title: const Text('Your Lists',
+              style: TextStyle(fontWeight: FontWeight.w700)),
+          subtitle:
+              const Text('Organize and share stories worth returning to.'),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: () => context.push('/lists'),
+        ),
       ),
     );
   }

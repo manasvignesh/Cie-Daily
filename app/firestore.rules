@@ -87,6 +87,17 @@ service cloud.firestore {
       allow delete: if isCreator() || isMainAdmin();
     }
 
+    match /articleLists/{listId} {
+      allow read: if resource.data.isPublic == true ||
+        (isSignedIn() && resource.data.ownerUid == request.auth.uid);
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerUid == request.auth.uid;
+      allow update: if isSignedIn() &&
+        resource.data.ownerUid == request.auth.uid &&
+        request.resource.data.ownerUid == resource.data.ownerUid;
+      allow delete: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+    }
+
     match /reels/{reelId} {
       allow read: if isSignedIn();
       allow create: if isCreator() && request.resource.data.authorId == request.auth.uid;

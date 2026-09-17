@@ -1,0 +1,13 @@
+const fs=require('fs'),path=require('path'),{execFileSync}=require('child_process');
+const local=path.resolve(__dirname,'../cie-daily-commercial/.tools/imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v7.1.exe');
+const ff=process.env.FFMPEG_PATH||(fs.existsSync(local)?local:'ffmpeg');
+const master='out/breakpoint_launch_master_1080x1920_60fps.mp4';
+if(!fs.existsSync(master))throw new Error('Render the master first.');
+const run=args=>execFileSync(ff,['-y','-hide_banner','-loglevel','error',...args],{stdio:'inherit'});
+run(['-i',master,'-c:v','libx264','-preset','slow','-crf','22','-pix_fmt','yuv420p','-r','60','-c:a','aac','-b:a','192k','-movflags','+faststart','out/breakpoint_launch_social.mp4']);
+run(['-ss','25.5','-i',master,'-frames:v','1','out/breakpoint_launch_poster.png']);
+fs.mkdirSync('review',{recursive:true});
+const select=[60,210,390,540,690,870,1080,1290,1470,1560,1710].map(n=>`eq(n,${n})`).join('+');
+run(['-i',master,'-vf',`select='${select}'`,'-fps_mode','vfr','review/final-%02d.png']);
+run(['-i',master,'-vf',`select='${select}',scale=270:480,tile=4x3`,'-frames:v','1','review/final-contact.jpg']);
+console.log('Exported social MP4, launch poster and eleven full-resolution review frames.');

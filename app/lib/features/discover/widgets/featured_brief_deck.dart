@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../feed/data/firebase_feed_repository.dart';
 import '../../feed/models/post_model.dart';
+import '../../lists/widgets/add_to_list_sheet.dart';
 import '../models/article_image_resolver.dart';
 import '../models/structured_article_model.dart';
 import '../models/article_category.dart';
@@ -136,6 +137,17 @@ class _FeaturedBriefDeckState extends ConsumerState<FeaturedBriefDeck> {
 
     try {
       await ref.read(feedRepositoryProvider).toggleBookmark(post.id, next);
+      if (mounted && next) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Saved'),
+            action: SnackBarAction(
+              label: 'Add to List',
+              onPressed: () => showAddToListSheet(context, post.id),
+            ),
+          ),
+        );
+      }
     } catch (_) {
       if (mounted) setState(() => _savedStates[post.id] = current);
     }
