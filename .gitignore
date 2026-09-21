@@ -12,3 +12,5 @@ supabase/.temp/
 *.wav
 Cie daily web/
 scratch_livekit/
+bat-animation/
+video-tools/

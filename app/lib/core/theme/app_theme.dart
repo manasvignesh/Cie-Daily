@@ -227,7 +227,13 @@ class AppTheme {
       scaffoldBackgroundColor: palette.background,
       colorScheme: ColorScheme.dark(
         primary: accent,
+        onPrimary: ThemeData.estimateBrightnessForColor(accent) == Brightness.light
+            ? const Color(0xFF090A0E)
+            : Colors.white,
         secondary: accent,
+        onSecondary: ThemeData.estimateBrightnessForColor(accent) == Brightness.light
+            ? const Color(0xFF090A0E)
+            : Colors.white,
         surface: palette.surface,
         onSurface: palette.primaryText,
         outline: palette.border,

@@ -1,7 +1,7 @@
 name: cie_connect
 description: "CIE Connect - Campus Discovery Platform"
 publish_to: 'none'
-version: 1.1.26+35
+version: 1.1.27+38
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

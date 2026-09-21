@@ -5,6 +5,8 @@ class PrimaryButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final bool isLoading;
   final IconData? icon;
+  final Color? backgroundColor;
+  final Color? foregroundColor;
 
   const PrimaryButton({
     super.key,
@@ -12,6 +14,8 @@ class PrimaryButton extends StatefulWidget {
     this.onPressed,
     this.isLoading = false,
     this.icon,
+    this.backgroundColor,
+    this.foregroundColor,
   });
 
   @override
@@ -24,6 +28,11 @@ class _PrimaryButtonState extends State<PrimaryButton> {
   @override
   Widget build(BuildContext context) {
     final bool isDisabled = widget.onPressed == null || widget.isLoading;
+    final bg = widget.backgroundColor ?? Theme.of(context).colorScheme.primary;
+    final isLightBg =
+        ThemeData.estimateBrightnessForColor(bg) == Brightness.light;
+    final effectiveFg = widget.foregroundColor ??
+        (isLightBg ? const Color(0xFF090A0E) : Colors.white);
 
     return GestureDetector(
       onTapDown: isDisabled ? null : (_) => setState(() => _isPressed = true),
@@ -39,11 +48,10 @@ class _PrimaryButtonState extends State<PrimaryButton> {
           child: ElevatedButton(
             onPressed: widget.isLoading ? null : widget.onPressed,
             style: ElevatedButton.styleFrom(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              foregroundColor: Colors.white,
+              backgroundColor: bg,
+              foregroundColor: effectiveFg,
               elevation: isDisabled ? 0 : 4,
-              shadowColor:
-                  Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+              shadowColor: bg.withValues(alpha: 0.4),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
               ),
@@ -51,14 +59,14 @@ class _PrimaryButtonState extends State<PrimaryButton> {
                   .colorScheme
                   .surfaceContainerHighest
                   .withValues(alpha: 0.5),
-              disabledForegroundColor: Colors.white.withValues(alpha: 0.5),
+              disabledForegroundColor: effectiveFg.withValues(alpha: 0.5),
             ),
             child: widget.isLoading
-                ? const SizedBox(
+                ? SizedBox(
                     height: 24,
                     width: 24,
                     child: CircularProgressIndicator(
-                      color: Colors.white,
+                      color: effectiveFg,
                       strokeWidth: 3,
                     ),
                   )
@@ -66,12 +74,13 @@ class _PrimaryButtonState extends State<PrimaryButton> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       if (widget.icon != null) ...[
-                        Icon(widget.icon, size: 20),
+                        Icon(widget.icon, size: 20, color: effectiveFg),
                         const SizedBox(width: 8),
                       ],
                       Text(
                         widget.text,
-                        style: const TextStyle(
+                        style: TextStyle(
+                          color: effectiveFg,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 0.5,
