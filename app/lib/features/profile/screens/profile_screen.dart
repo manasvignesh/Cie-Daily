@@ -21,6 +21,7 @@ import '../../../core/widgets/breakpoint_logo.dart';
 import '../../../core/theme/theme_provider.dart';
 import '../../../core/services/cloudinary_service.dart';
 import '../../../core/errors/error_mapper.dart';
+import '../../medha/widgets/medha_settings_section.dart';
 
 String _profileString(
   Map<String, dynamic>? data,
@@ -2284,9 +2285,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen>
                   },
                 ),
 
+                const MedhaSettingsSection(),
+
                 // ── APPEARANCE / THEME SELECTOR ─────────────────────────────
                 Padding(
-                  padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
                   child: Align(
                     alignment: Alignment.centerLeft,
                     child: Text('Appearance',

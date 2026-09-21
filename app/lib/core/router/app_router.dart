@@ -32,8 +32,10 @@ import '../../features/admin/screens/admin_dashboard_screen.dart';
 import '../../features/admin/screens/admin_spaces_screen.dart';
 import '../../features/admin/screens/admin_moderation_screen.dart';
 import '../../features/admin/screens/admin_users_screen.dart';
+import '../../features/medha/providers/medha_behavior_controller.dart';
 
-final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final rootNavigatorKey = GlobalKey<NavigatorState>();
+final _rootNavigatorKey = rootNavigatorKey;
 final _shellNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -365,6 +367,30 @@ class _MainSwipeShellState extends State<MainSwipeShell> {
     '/profile',
   ];
 
+  DateTime _lastMedhaScrollReaction = DateTime.fromMillisecondsSinceEpoch(0);
+
+  bool _handleMedhaScroll(ScrollNotification notification) {
+    if (!isTopLevelLocation(widget.location) ||
+        notification.metrics.axis != Axis.vertical) {
+      return false;
+    }
+    final now = DateTime.now();
+    if (now.difference(_lastMedhaScrollReaction) >
+        const Duration(milliseconds: 650)) {
+      _lastMedhaScrollReaction = now;
+      if (notification is ScrollUpdateNotification &&
+          notification.scrollDelta != null) {
+        ProviderScope.containerOf(context, listen: false)
+            .read(medhaBehaviorControllerProvider.notifier)
+            .onScroll(
+              delta: notification.scrollDelta!,
+              velocity: notification.scrollDelta!.abs() * 60,
+            );
+      }
+    }
+    return false;
+  }
+
   int _calculateIndex(String loc) {
     if (loc.startsWith('/home')) return 0;
     if (loc.startsWith('/discover')) return 1;
@@ -390,31 +416,39 @@ class _MainSwipeShellState extends State<MainSwipeShell> {
 
     return Scaffold(
       extendBody: true,
-      body: isTopLevel
-          ? AnimatedSwitcher(
-              duration: const Duration(milliseconds: 180),
-              layoutBuilder: (currentChild, previousChildren) {
-                return Stack(
-                  fit: StackFit.expand,
-                  alignment: Alignment.topCenter,
-                  children: <Widget>[
-                    ...previousChildren,
-                    if (currentChild != null) currentChild,
-                  ],
-                );
-              },
-              transitionBuilder: (child, animation) {
-                return FadeTransition(
-                  opacity: animation,
-                  child: child,
-                );
-              },
-              child: KeyedSubtree(
-                key: ValueKey(widget.location),
-                child: widget.child,
-              ),
-            )
-          : widget.child,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          isTopLevel
+              ? NotificationListener<ScrollNotification>(
+                  onNotification: _handleMedhaScroll,
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 180),
+                    layoutBuilder: (currentChild, previousChildren) {
+                      return Stack(
+                        fit: StackFit.expand,
+                        alignment: Alignment.topCenter,
+                        children: <Widget>[
+                          ...previousChildren,
+                          if (currentChild != null) currentChild,
+                        ],
+                      );
+                    },
+                    transitionBuilder: (child, animation) {
+                      return FadeTransition(
+                        opacity: animation,
+                        child: child,
+                      );
+                    },
+                    child: KeyedSubtree(
+                      key: ValueKey(widget.location),
+                      child: widget.child,
+                    ),
+                  ),
+                )
+              : widget.child,
+        ],
+      ),
       bottomNavigationBar: AppBottomNav(
         currentIndex: currentIndex,
         onItemSelected: (index) {
@@ -425,4 +459,11 @@ class _MainSwipeShellState extends State<MainSwipeShell> {
       ),
     );
   }
+
+  bool isTopLevelLocation(String location) =>
+      location == '/home' ||
+      location == '/discover' ||
+      location == '/spaces' ||
+      location == '/chat' ||
+      location == '/profile';
 }

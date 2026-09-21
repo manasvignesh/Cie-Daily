@@ -7,6 +7,10 @@ import '../providers/auth_provider.dart';
 import '../../../core/widgets/buttons/primary_button.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/errors/error_mapper.dart';
+import '../../medha/models/medha_models.dart';
+import '../../medha/providers/medha_preferences_provider.dart';
+import '../../medha/widgets/medha_companion_selector.dart';
+import '../../medha/widgets/medha_companion_sprite.dart';
 
 class ProfileSetupScreen extends ConsumerStatefulWidget {
   const ProfileSetupScreen({super.key});
@@ -21,6 +25,9 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
   final _yearController = TextEditingController();
   bool _isLoading = false;
   String? _formError;
+  bool _showCompanionStep = false;
+  bool _showCompanionIntro = false;
+  MedhaCompanionType _selectedCompanion = MedhaCompanionType.kiro;
 
   @override
   void dispose() {
@@ -49,6 +56,29 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     }
 
     setState(() {
+      _formError = null;
+      _showCompanionStep = true;
+    });
+  }
+
+  Future<void> _completeProfile(
+    MedhaCompanionType companion, {
+    required bool showIntro,
+  }) async {
+    if (_isLoading) return;
+    final name = _nameController.text.trim();
+    final department = _departmentController.text.trim();
+    final year = int.parse(_yearController.text.trim());
+    await ref
+        .read(medhaPreferencesProvider.notifier)
+        .selectCompanion(companion);
+    if (showIntro) {
+      setState(() => _showCompanionIntro = true);
+      await Future<void>.delayed(const Duration(milliseconds: 1400));
+      if (!mounted) return;
+    }
+    setState(() {
+      _showCompanionIntro = false;
       _isLoading = true;
       _formError = null;
     });
@@ -82,6 +112,15 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     final borderColor = AppTheme.cardBorderColor(context);
     final inputFill =
         isDark ? const Color(0xFF1C1C28) : const Color(0xFFF2F2F7);
+
+    if (_showCompanionStep) {
+      return _buildCompanionStep(
+        context,
+        backgroundColor: bgColor,
+        primaryTextColor: primaryTextColor,
+        secondaryTextColor: secondaryTextColor,
+      );
+    }
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -225,6 +264,135 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompanionStep(
+    BuildContext context, {
+    required Color backgroundColor,
+    required Color primaryTextColor,
+    required Color secondaryTextColor,
+  }) {
+    final profile = _selectedCompanion.profile;
+    return Scaffold(
+      backgroundColor: backgroundColor,
+      body: SafeArea(
+        child: AnimatedSwitcher(
+          duration: const Duration(milliseconds: 260),
+          child: _showCompanionIntro
+              ? Center(
+                  key: const ValueKey('medha-intro'),
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        MedhaCompanionSprite(
+                          companion: _selectedCompanion,
+                          state: MedhaBehaviorState.curious,
+                          size: 190,
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          profile.name,
+                          style: TextStyle(
+                            color: primaryTextColor,
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          '“Let’s find something worth knowing.”',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: secondaryTextColor,
+                            fontSize: 15,
+                            height: 1.4,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
+                  key: const ValueKey('medha-selection'),
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: IconButton(
+                          tooltip: 'Back to profile',
+                          onPressed: _isLoading
+                              ? null
+                              : () =>
+                                  setState(() => _showCompanionStep = false),
+                          icon: const Icon(Icons.arrow_back_rounded),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Choose your MEDHA companion',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: primaryTextColor,
+                          fontSize: 27,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Same intelligence. Different spirits.\nChoose the one that feels like you.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: secondaryTextColor,
+                          fontSize: 14,
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 26),
+                      MedhaCompanionSelector(
+                        selected: _selectedCompanion,
+                        onSelected: (value) =>
+                            setState(() => _selectedCompanion = value),
+                      ),
+                      const SizedBox(height: 24),
+                      PrimaryButton(
+                        text: 'Continue with ${profile.name}',
+                        isLoading: _isLoading,
+                        icon: Icons.auto_awesome_rounded,
+                        onPressed: () => _completeProfile(
+                          _selectedCompanion,
+                          showIntro: true,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () => _completeProfile(
+                                  MedhaCompanionType.kiro,
+                                  showIntro: false,
+                                ),
+                        child: const Text('Choose later'),
+                      ),
+                      if (_formError != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: Text(
+                            _formError!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.redAccent),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
         ),
       ),
     );

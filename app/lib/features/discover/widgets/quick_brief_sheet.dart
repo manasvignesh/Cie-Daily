@@ -3,11 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/language_provider.dart';
+import '../../../core/constants/supported_languages.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../feed/data/firebase_feed_repository.dart';
 import '../../feed/models/post_model.dart';
 import '../../lists/widgets/add_to_list_sheet.dart';
+import '../../medha/models/medha_models.dart';
+import '../../medha/providers/medha_behavior_controller.dart';
+import '../../medha/providers/medha_preferences_provider.dart';
 import '../models/structured_article_model.dart';
 import 'language_picker_sheet.dart';
 import 'premium_audio_player.dart';
@@ -53,6 +57,11 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
   late int _currentIndex;
   late List<_QuickBriefPageData> _pages;
   final Map<String, bool> _savedStates = {};
+  MedhaContext? _previousMedhaContext;
+  final Object _medhaContextOwner = Object();
+  ProviderContainer? _providerContainer;
+  String? _scheduledContextSignature;
+  String? _publishedContextSignature;
 
   @override
   void initState() {
@@ -63,9 +72,17 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
     _pages = widget.featuredPosts
         .map((p) => _buildPageData(p, ref.read(contentLanguageProvider)))
         .toList(growable: false);
+    _previousMedhaContext = ref.read(medhaActiveContextProvider);
     for (final post in widget.featuredPosts) {
       _savedStates[post.id] = post.isBookmarkedByCurrentUser;
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _providerContainer ??= ProviderScope.containerOf(context, listen: false);
+    _scheduleMedhaContextPublication();
   }
 
   @override
@@ -90,6 +107,7 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
     final retainedIndex = _pages.indexWhere((page) => page.post.id == activeId);
     _currentIndex = (retainedIndex >= 0 ? retainedIndex : _currentIndex)
         .clamp(0, _pages.length - 1);
+    _scheduleMedhaContextPublication();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _pageController.hasClients) {
         _pageController.jumpToPage(_currentIndex);
@@ -99,8 +117,112 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
 
   @override
   void dispose() {
+    final container = _providerContainer;
+    final previous = _previousMedhaContext;
+    if (container != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        container.read(medhaActiveContextProvider.notifier).release(
+              owner: _medhaContextOwner,
+              restore: previous,
+            );
+      });
+    }
     _pageController.dispose();
     super.dispose();
+  }
+
+  MedhaContext _medhaContextFor(int index) {
+    final page = _pages[index.clamp(0, _pages.length - 1)];
+    final full = StructuredArticleData.fromPostModel(
+      page.post,
+      language: page.language,
+    );
+    return MedhaContext(
+      route: '/quick-brief/${page.post.id}',
+      screenType: 'quickBrief',
+      contentMode: MedhaContentMode.quickBrief,
+      contentLocale: SupportedLanguages.get(page.language)?.code ?? 'en-IN',
+      articleId: page.post.id,
+      articleTitle: page.headline,
+      articleSummary: page.summary,
+      articleBody: full.narrationFallbackText,
+      visibleSection: 'Swipe Deck card ${index + 1}',
+      category: page.category,
+      author: page.post.authorName,
+      currentScrollSection: 'Current Swipe Deck card',
+      quickSummary: page.summary,
+      currentDeckCardIndex: index,
+      currentDeckCardTitle: page.headline,
+      currentDeckCardText: page.fallbackText,
+      allDeckCards: _surroundingDeckCards(index),
+      keyNumbers: [
+        if (page.keyNumber != null)
+          '${page.keyNumber!.value}: ${page.keyNumber!.label}',
+      ],
+      whyItMatters: full.whyItMatters,
+      relatedArticleIds: _surroundingPages(index)
+          .where((card) => card.post.id != page.post.id)
+          .map((card) => card.post.id)
+          .toList(growable: false),
+    );
+  }
+
+  List<_QuickBriefPageData> _surroundingPages(int currentIndex) {
+    final start = (currentIndex - 2).clamp(0, _pages.length);
+    final end = (currentIndex + 3).clamp(0, _pages.length);
+    return _pages.sublist(start, end);
+  }
+
+  List<String> _surroundingDeckCards(int currentIndex) {
+    return _surroundingPages(currentIndex).map((card) {
+      final value = '${card.headline}. ${card.summary}'.trim();
+      return value.length <= 420 ? value : '${value.substring(0, 420)}…';
+    }).toList(growable: false);
+  }
+
+  void _scheduleMedhaContextPublication() {
+    if (_pages.isEmpty) {
+      _scheduledContextSignature = null;
+      return;
+    }
+    final active = _medhaContextFor(_currentIndex);
+    final signature = MedhaActiveContextController.signatureOf(active);
+    if (_publishedContextSignature == signature) {
+      _scheduledContextSignature = null;
+      return;
+    }
+    if (_scheduledContextSignature == signature) {
+      return;
+    }
+    _scheduledContextSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _scheduledContextSignature != signature) return;
+      ref.read(medhaActiveContextProvider.notifier).publish(
+            owner: _medhaContextOwner,
+            context: active,
+          );
+      _publishedContextSignature = signature;
+      _scheduledContextSignature = null;
+    });
+  }
+
+  void _reactToCardChange(int previous, int next) {
+    final direction = next > previous ? 1.0 : -1.0;
+    ref.read(medhaBehaviorControllerProvider.notifier).onCardChanged(direction);
+  }
+
+  bool _handleBriefScroll(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical ||
+        notification is! ScrollUpdateNotification ||
+        notification.scrollDelta == null) {
+      return false;
+    }
+    final delta = notification.scrollDelta!;
+    ref.read(medhaBehaviorControllerProvider.notifier).onScroll(
+          delta: delta,
+          velocity: delta.abs() * 60,
+        );
+    return false;
   }
 
   Future<void> _toggleSave(PostModel post) async {
@@ -247,6 +369,7 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
     _pages = widget.featuredPosts
         .map((p) => _buildPageData(p, ref.watch(contentLanguageProvider)))
         .toList(growable: false);
+    _scheduleMedhaContextPublication();
 
     final primaryText = AppTheme.primaryTextColor(context);
     final secondaryText = AppTheme.secondaryTextColor(context);
@@ -344,7 +467,10 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
               itemCount: _pages.length,
               onPageChanged: (index) {
                 HapticFeedback.lightImpact();
+                final previous = _currentIndex;
                 setState(() => _currentIndex = index);
+                _scheduleMedhaContextPublication();
+                _reactToCardChange(previous, index);
               },
               itemBuilder: (context, index) {
                 final page = _pages[index];
@@ -355,256 +481,260 @@ class _QuickBriefSheetState extends ConsumerState<QuickBriefSheet> {
                 final normalizedFacts = page.facts;
                 final keyNum = page.keyNumber;
 
-                return SingleChildScrollView(
-                  physics: const BouncingScrollPhysics(),
-                  padding: EdgeInsets.fromLTRB(
-                    20,
-                    16,
-                    20,
-                    24 + MediaQuery.paddingOf(context).bottom,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 3. CATEGORY TAG (SMALL UPPERCASE TEXT, NO GIANT PILL)
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            category.toUpperCase(),
-                            style: const TextStyle(
-                              color: AppTheme.primaryOrange,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 11,
-                              letterSpacing: 0.8,
-                              fontFamily: 'Inter',
-                            ),
-                          ),
-                          Builder(
-                            builder: (context) {
-                              final availableLanguages = ['en'];
-                              page.post.publishedArticle.languages
-                                  .forEach((k, v) {
-                                if (k != 'en' &&
-                                    v.translationStatus == 'ready') {
-                                  availableLanguages.add(k);
-                                }
-                              });
-                              return LanguagePickerButton(
-                                availableLanguageIds: availableLanguages,
-                                compact: true,
-                              );
-                            },
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-
-                      // 4. HEADLINE (DIRECTLY BELOW CATEGORY, NO CONTAINER)
-                      Text(
-                        headline,
-                        style: TextStyle(
-                          color: primaryText,
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          fontFamily: 'Outfit',
-                          height: 1.22,
-                          letterSpacing: -0.4,
-                        ),
-                        maxLines: 5,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 18),
-
-                      // 5. IN 20 SECONDS (ONLY MAJOR HIGHLIGHTED SUMMARY BOX)
-                      if (normalizedSummary.isNotEmpty)
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(18),
-                          decoration: BoxDecoration(
-                            color:
-                                AppTheme.primaryOrange.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(15),
-                            border: Border.all(
-                                color: AppTheme.primaryOrange
-                                    .withValues(alpha: 0.25),
-                                width: 1),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Row(
-                                children: [
-                                  Icon(Icons.bolt_rounded,
-                                      color: AppTheme.primaryOrange, size: 18),
-                                  SizedBox(width: 6),
-                                  Text(
-                                    'IN 20 SECONDS',
-                                    style: TextStyle(
-                                      color: AppTheme.primaryOrange,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: 0.8,
-                                      fontFamily: 'Inter',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 10),
-                              if (page.audioUrl != null)
-                                PremiumAudioPlayer(
-                                  audioUrl: page.audioUrl!,
-                                  title: headline,
-                                  language: page.language,
-                                  audioStatus: page.audioStatus,
-                                  fallbackText: page.fallbackText,
-                                  compact: true,
-                                )
-                              else
-                                RemoteNarrationUnavailable(
-                                  language: page.language,
-                                  audioStatus: page.audioStatus,
-                                  fallbackText: page.fallbackText,
-                                  compact: true,
-                                ),
-                              const SizedBox(height: 10),
-                              Text(
-                                normalizedSummary,
-                                style: TextStyle(
-                                  color: primaryText,
-                                  fontSize: 14.5,
-                                  fontWeight: FontWeight.w500,
-                                  height: 1.48,
-                                  fontFamily: 'Inter',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      const SizedBox(height: 20),
-
-                      // 6. 3 THINGS TO KNOW (CLEAN VERTICAL BULLETS, NO INDIVIDUAL BOXES)
-                      if (normalizedFacts.isNotEmpty) ...[
-                        const Row(
+                return NotificationListener<ScrollNotification>(
+                  onNotification: _handleBriefScroll,
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: EdgeInsets.fromLTRB(
+                      20,
+                      16,
+                      20,
+                      24 + MediaQuery.paddingOf(context).bottom,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 3. CATEGORY TAG (SMALL UPPERCASE TEXT, NO GIANT PILL)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Icon(Icons.check_circle_outline_rounded,
-                                color: AppTheme.primaryOrange, size: 16),
-                            SizedBox(width: 6),
                             Text(
-                              '3 THINGS TO KNOW',
-                              style: TextStyle(
+                              category.toUpperCase(),
+                              style: const TextStyle(
                                 color: AppTheme.primaryOrange,
-                                fontSize: 11,
                                 fontWeight: FontWeight.w900,
+                                fontSize: 11,
                                 letterSpacing: 0.8,
-                                fontFamily: 'Outfit',
+                                fontFamily: 'Inter',
                               ),
+                            ),
+                            Builder(
+                              builder: (context) {
+                                final availableLanguages = ['en'];
+                                page.post.publishedArticle.languages
+                                    .forEach((k, v) {
+                                  if (k != 'en' &&
+                                      v.translationStatus == 'ready') {
+                                    availableLanguages.add(k);
+                                  }
+                                });
+                                return LanguagePickerButton(
+                                  availableLanguageIds: availableLanguages,
+                                  compact: true,
+                                );
+                              },
                             ),
                           ],
                         ),
-                        const SizedBox(height: 12),
-                        ...normalizedFacts.map((fact) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 10),
-                            child: Row(
+                        const SizedBox(height: 8),
+
+                        // 4. HEADLINE (DIRECTLY BELOW CATEGORY, NO CONTAINER)
+                        Text(
+                          headline,
+                          style: TextStyle(
+                            color: primaryText,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                            fontFamily: 'Outfit',
+                            height: 1.22,
+                            letterSpacing: -0.4,
+                          ),
+                          maxLines: 5,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 18),
+
+                        // 5. IN 20 SECONDS (ONLY MAJOR HIGHLIGHTED SUMMARY BOX)
+                        if (normalizedSummary.isNotEmpty)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(18),
+                            decoration: BoxDecoration(
+                              color: AppTheme.primaryOrange
+                                  .withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(15),
+                              border: Border.all(
+                                  color: AppTheme.primaryOrange
+                                      .withValues(alpha: 0.25),
+                                  width: 1),
+                            ),
+                            child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Icon(Icons.check_rounded,
-                                    color: AppTheme.primaryOrange, size: 16),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    fact,
-                                    style: TextStyle(
-                                      color: primaryText,
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w500,
-                                      height: 1.38,
-                                      fontFamily: 'Inter',
+                                const Row(
+                                  children: [
+                                    Icon(Icons.bolt_rounded,
+                                        color: AppTheme.primaryOrange,
+                                        size: 18),
+                                    SizedBox(width: 6),
+                                    Text(
+                                      'IN 20 SECONDS',
+                                      style: TextStyle(
+                                        color: AppTheme.primaryOrange,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: 0.8,
+                                        fontFamily: 'Inter',
+                                      ),
                                     ),
+                                  ],
+                                ),
+                                const SizedBox(height: 10),
+                                if (page.audioUrl != null)
+                                  PremiumAudioPlayer(
+                                    audioUrl: page.audioUrl!,
+                                    title: headline,
+                                    language: page.language,
+                                    audioStatus: page.audioStatus,
+                                    fallbackText: page.fallbackText,
+                                    compact: true,
+                                  )
+                                else
+                                  RemoteNarrationUnavailable(
+                                    language: page.language,
+                                    audioStatus: page.audioStatus,
+                                    fallbackText: page.fallbackText,
+                                    compact: true,
+                                  ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  normalizedSummary,
+                                  style: TextStyle(
+                                    color: primaryText,
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w500,
+                                    height: 1.48,
+                                    fontFamily: 'Inter',
                                   ),
                                 ),
                               ],
                             ),
-                          );
-                        }),
+                          ),
                         const SizedBox(height: 20),
-                      ],
 
-                      // 7. KEY NUMBER (RENDERED ONLY IF A GENUINELY VALID METRIC EXISTS)
-                      if (keyNum != null) ...[
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 14, horizontal: 18),
-                          decoration: BoxDecoration(
-                            color: AppTheme.cardColor(context),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: borderColor, width: 1),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        // 6. 3 THINGS TO KNOW (CLEAN VERTICAL BULLETS, NO INDIVIDUAL BOXES)
+                        if (normalizedFacts.isNotEmpty) ...[
+                          const Row(
                             children: [
-                              Text(
-                                keyNum.value,
-                                style: const TextStyle(
-                                  color: AppTheme.primaryOrange,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  fontFamily: 'Outfit',
-                                  letterSpacing: -0.4,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                keyNum.label,
-                                style: TextStyle(
-                                  color: secondaryText,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Inter',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                      ],
-
-                      // 8. READ FULL STORY CTA BUTTON
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.of(context).pop();
-                            widget.onOpenFullArticle(post);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppTheme.primaryOrange,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                            elevation: 0,
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(14)),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                'Read Full Story',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.bold,
-                                  fontFamily: 'Outfit',
-                                ),
-                              ),
+                              Icon(Icons.check_circle_outline_rounded,
+                                  color: AppTheme.primaryOrange, size: 16),
                               SizedBox(width: 6),
-                              Icon(Icons.arrow_forward_rounded, size: 18),
+                              Text(
+                                '3 THINGS TO KNOW',
+                                style: TextStyle(
+                                  color: AppTheme.primaryOrange,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 0.8,
+                                  fontFamily: 'Outfit',
+                                ),
+                              ),
                             ],
                           ),
+                          const SizedBox(height: 12),
+                          ...normalizedFacts.map((fact) {
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.check_rounded,
+                                      color: AppTheme.primaryOrange, size: 16),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      fact,
+                                      style: TextStyle(
+                                        color: primaryText,
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w500,
+                                        height: 1.38,
+                                        fontFamily: 'Inter',
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 20),
+                        ],
+
+                        // 7. KEY NUMBER (RENDERED ONLY IF A GENUINELY VALID METRIC EXISTS)
+                        if (keyNum != null) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                vertical: 14, horizontal: 18),
+                            decoration: BoxDecoration(
+                              color: AppTheme.cardColor(context),
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: borderColor, width: 1),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  keyNum.value,
+                                  style: const TextStyle(
+                                    color: AppTheme.primaryOrange,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w900,
+                                    fontFamily: 'Outfit',
+                                    letterSpacing: -0.4,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  keyNum.label,
+                                  style: TextStyle(
+                                    color: secondaryText,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    fontFamily: 'Inter',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+
+                        // 8. READ FULL STORY CTA BUTTON
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.of(context).pop();
+                              widget.onOpenFullArticle(post);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryOrange,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: const Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  'Read Full Story',
+                                  style: TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'Outfit',
+                                  ),
+                                ),
+                                SizedBox(width: 6),
+                                Icon(Icons.arrow_forward_rounded, size: 18),
+                              ],
+                            ),
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 );
               },

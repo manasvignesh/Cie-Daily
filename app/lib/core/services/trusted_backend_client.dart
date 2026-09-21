@@ -29,6 +29,8 @@ class TrustedBackendClient {
   final http.Client _http;
   final String _baseUrl;
 
+  void close() => _http.close();
+
   bool get isConfigured => _baseUrl.startsWith('https://');
 
   static String newRequestId() {

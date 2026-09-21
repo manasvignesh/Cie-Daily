@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.publish-content]
 verify_jwt = false
+
+[functions.medha-chat]
+verify_jwt = false

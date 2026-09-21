@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:go_router/go_router.dart';
+
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_provider.dart';
 import 'features/auth/providers/auth_provider.dart';
+import 'features/medha/providers/medha_behavior_controller.dart';
+import 'features/medha/widgets/medha_companion_overlay.dart';
 import 'features/notifications/services/notification_service.dart';
 import 'core/widgets/indicators/offline_banner.dart';
 import 'core/widgets/material_grain.dart';
@@ -46,6 +50,10 @@ class _CIEConnectAppState extends ConsumerState<CIEConnectApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _notifications.syncForAuthenticatedUser();
+      ref.read(medhaBehaviorControllerProvider.notifier).onAppResumed();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      ref.read(medhaBehaviorControllerProvider.notifier).onAppPaused();
     }
   }
 
@@ -82,13 +90,19 @@ class _CIEConnectAppState extends ConsumerState<CIEConnectApp>
           context,
           child ?? const SizedBox.shrink(),
           authStatus,
+          goRouter,
         ),
       ),
       debugShowCheckedModeBanner: false,
     );
   }
 
-  Widget _mainAppBody(BuildContext context, Widget child, AuthStatus status) {
+  Widget _mainAppBody(
+    BuildContext context,
+    Widget child,
+    AuthStatus status,
+    GoRouter goRouter,
+  ) {
     final inMainApp = status == AuthStatus.authenticatedStudent ||
         status == AuthStatus.authenticatedAdmin;
     if (inMainApp && !_updateCheckScheduled) {
@@ -97,12 +111,36 @@ class _CIEConnectAppState extends ConsumerState<CIEConnectApp>
         _inAppUpdates.checkAndOffer(context);
       });
     }
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        OfflineAwareBody(child: child),
-        const MaterialGrain(),
-      ],
+    return ListenableBuilder(
+      listenable: goRouter.routerDelegate,
+      builder: (context, _) {
+        final location = goRouter.routerDelegate.currentConfiguration.uri.path;
+        final showMedha = inMainApp &&
+            location != '/' &&
+            location != '/login' &&
+            location != '/profile_setup' &&
+            !location.startsWith('/admin') &&
+            !location.startsWith('/create_');
+        final isArticle =
+            location.startsWith('/article') || location.contains('/article');
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            OfflineAwareBody(child: child),
+            const MaterialGrain(),
+            if (showMedha)
+              MedhaCompanionOverlay(
+                bottomInset: isArticle ? 116 : 84,
+                screenType: location,
+                allowRoaming: !location.startsWith('/chat') &&
+                    !location.startsWith('/reel'),
+                minimal: location.startsWith('/spaces') ||
+                    location.startsWith('/chat') ||
+                    location.startsWith('/reel'),
+              ),
+          ],
+        );
+      },
     );
   }
 }

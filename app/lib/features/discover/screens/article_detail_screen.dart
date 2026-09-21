@@ -16,6 +16,10 @@ import '../providers/discover_provider.dart';
 import '../widgets/article_components.dart';
 import '../widgets/language_picker_sheet.dart';
 import '../../lists/widgets/add_to_list_sheet.dart';
+import '../../medha/models/medha_models.dart';
+import '../../medha/providers/medha_behavior_controller.dart';
+import '../../medha/providers/medha_context_provider.dart';
+import '../../medha/providers/medha_preferences_provider.dart';
 
 class ArticleDetailScreen extends ConsumerStatefulWidget {
   final String? articleId;
@@ -36,13 +40,62 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
   double _readingProgress = 0.0;
   bool? _isSaved;
   bool _saving = false;
+  DateTime _lastMedhaScrollReaction = DateTime.fromMillisecondsSinceEpoch(0);
+  MedhaContext? _previousMedhaContext;
+  final Object _medhaContextOwner = Object();
+  ProviderContainer? _providerContainer;
+  String? _scheduledMedhaContextSignature;
+  String? _publishedMedhaContextSignature;
 
   @override
   void initState() {
     super.initState();
+    _previousMedhaContext = ref.read(medhaActiveContextProvider);
     if (widget.initialArticle != null) {
       _isSaved = widget.initialArticle!.isBookmarkedByCurrentUser;
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _providerContainer ??= ProviderScope.containerOf(context, listen: false);
+  }
+
+  @override
+  void dispose() {
+    final container = _providerContainer;
+    final previous = _previousMedhaContext;
+    if (container != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        container.read(medhaActiveContextProvider.notifier).release(
+              owner: _medhaContextOwner,
+              restore: previous,
+            );
+      });
+    }
+    super.dispose();
+  }
+
+  void _scheduleMedhaContextPublication(MedhaContext medhaContext) {
+    final signature = MedhaActiveContextController.signatureOf(medhaContext);
+    if (_publishedMedhaContextSignature == signature) {
+      _scheduledMedhaContextSignature = null;
+      return;
+    }
+    if (_scheduledMedhaContextSignature == signature) {
+      return;
+    }
+    _scheduledMedhaContextSignature = signature;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _scheduledMedhaContextSignature != signature) return;
+      ref.read(medhaActiveContextProvider.notifier).publish(
+            owner: _medhaContextOwner,
+            context: medhaContext,
+          );
+      _publishedMedhaContextSignature = signature;
+      _scheduledMedhaContextSignature = null;
+    });
   }
 
   Future<void> _toggleSaved(PostModel article) async {
@@ -84,8 +137,20 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
     final max = notification.metrics.maxScrollExtent;
     final next =
         max <= 0 ? 0.0 : (notification.metrics.pixels / max).clamp(0.0, 1.0);
-    if ((next - _readingProgress).abs() > 0.01) {
+    final progressDelta = next - _readingProgress;
+    if (progressDelta.abs() > 0.01) {
       setState(() => _readingProgress = next);
+    }
+    if (notification is ScrollUpdateNotification) {
+      final now = DateTime.now();
+      if (now.difference(_lastMedhaScrollReaction) >
+          const Duration(milliseconds: 650)) {
+        _lastMedhaScrollReaction = now;
+        ref.read(medhaBehaviorControllerProvider.notifier).onScroll(
+              delta: progressDelta,
+              velocity: (notification.scrollDelta?.abs() ?? 0) * 60,
+            );
+      }
     }
     return false;
   }
@@ -126,11 +191,21 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
 
     final primaryText = AppTheme.primaryTextColor(context);
     final isSaved = _isSaved ?? articlePost.isBookmarkedByCurrentUser;
+    final medhaContext = ref.watch(
+      medhaArticleContextProvider(
+        MedhaArticleContextInput(
+          article: structuredData,
+          scrollProgress: _readingProgress,
+        ),
+      ),
+    );
+    _scheduleMedhaContextPublication(medhaContext);
 
     final availableLanguages = ['en'];
     articlePost.publishedArticle.languages.forEach((k, v) {
-      if (k != 'en' && v.translationStatus == 'ready')
+      if (k != 'en' && v.translationStatus == 'ready') {
         availableLanguages.add(k);
+      }
     });
 
     return Scaffold(
@@ -215,97 +290,103 @@ class _ArticleDetailScreenState extends ConsumerState<ArticleDetailScreen> {
           ),
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Expanded(
-            child: NotificationListener<ScrollNotification>(
-              onNotification: _trackReadingProgress,
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (availableLanguages.length > 1)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Align(
-                          alignment: Alignment.centerRight,
-                          child: LanguagePickerButton(
-                            availableLanguageIds: availableLanguages,
+          Column(
+            children: [
+              Expanded(
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: _trackReadingProgress,
+                  child: SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (availableLanguages.length > 1)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12),
+                            child: Align(
+                              alignment: Alignment.centerRight,
+                              child: LanguagePickerButton(
+                                availableLanguageIds: availableLanguages,
+                              ),
+                            ),
                           ),
+                        // 1. HERO SECTION
+                        ArticleHeroSection(
+                          article: structuredData,
+                          isSelf: isSelf,
+                          isFollowing: isFollowing,
+                          onFollow: () {
+                            if (currentUserId != null &&
+                                structuredData.authorId != null) {
+                              ref.read(userRepositoryProvider).toggleFollowUser(
+                                    currentUserId: currentUserId,
+                                    targetUserId: structuredData.authorId!,
+                                    follow: !isFollowing,
+                                  );
+                            }
+                          },
                         ),
-                      ),
-                    // 1. HERO SECTION
-                    ArticleHeroSection(
-                      article: structuredData,
-                      isSelf: isSelf,
-                      isFollowing: isFollowing,
-                      onFollow: () {
-                        if (currentUserId != null &&
-                            structuredData.authorId != null) {
-                          ref.read(userRepositoryProvider).toggleFollowUser(
-                                currentUserId: currentUserId,
-                                targetUserId: structuredData.authorId!,
-                                follow: !isFollowing,
-                              );
-                        }
-                      },
+                        const SizedBox(height: 20),
+
+                        // 2. KEY NUMBERS
+                        KeyNumbersRow(numbers: structuredData.keyNumbers),
+                        const SizedBox(height: 20),
+
+                        // 3. WHY THIS MATTERS
+                        if (structuredData.whyItMatters.isNotEmpty) ...[
+                          WhyThisMattersSection(
+                              text: structuredData.whyItMatters),
+                          const SizedBox(height: 20),
+                        ],
+
+                        // 4. EXPLORE THE STORY
+                        ExploreTheStorySection(
+                            items: structuredData.exploreSections),
+                        const SizedBox(height: 20),
+
+                        // 5. QUOTE
+                        if (structuredData.quoteText != null) ...[
+                          EditorialQuoteWidget(
+                            quote: structuredData.quoteText!,
+                            speaker: structuredData.quoteSpeaker ?? '',
+                            role: structuredData.quoteRole ?? '',
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+
+                        // 6. YOU NOW KNOW
+                        if (structuredData.takeaways.isNotEmpty)
+                          YouNowKnowWidget(takeaways: structuredData.takeaways),
+                        const SizedBox(height: 28),
+                      ],
                     ),
-                    const SizedBox(height: 20),
-
-                    // 2. KEY NUMBERS
-                    KeyNumbersRow(numbers: structuredData.keyNumbers),
-                    const SizedBox(height: 20),
-
-                    // 3. WHY THIS MATTERS
-                    if (structuredData.whyItMatters.isNotEmpty) ...[
-                      WhyThisMattersSection(text: structuredData.whyItMatters),
-                      const SizedBox(height: 20),
-                    ],
-
-                    // 4. EXPLORE THE STORY
-                    ExploreTheStorySection(
-                        items: structuredData.exploreSections),
-                    const SizedBox(height: 20),
-
-                    // 5. QUOTE
-                    if (structuredData.quoteText != null) ...[
-                      EditorialQuoteWidget(
-                        quote: structuredData.quoteText!,
-                        speaker: structuredData.quoteSpeaker ?? '',
-                        role: structuredData.quoteRole ?? '',
-                      ),
-                      const SizedBox(height: 20),
-                    ],
-
-                    // 6. YOU NOW KNOW
-                    if (structuredData.takeaways.isNotEmpty)
-                      YouNowKnowWidget(takeaways: structuredData.takeaways),
-                    const SizedBox(height: 28),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
 
-          // 7. STICKY BOTTOM ACTION BAR
-          ArticleBottomActionBar(
-            isSaved: isSaved,
-            isFollowing: isFollowing,
-            onSave: () => _toggleSaved(articlePost),
-            onDiscuss: () => CommentsBottomSheet.show(context, articlePost.id),
-            onShare: () => _shareArticle(context, articlePost),
-            onFollow: () {
-              if (currentUserId != null && structuredData.authorId != null) {
-                ref.read(userRepositoryProvider).toggleFollowUser(
-                      currentUserId: currentUserId,
-                      targetUserId: structuredData.authorId!,
-                      follow: !isFollowing,
-                    );
-              }
-            },
+              // 7. STICKY BOTTOM ACTION BAR
+              ArticleBottomActionBar(
+                isSaved: isSaved,
+                isFollowing: isFollowing,
+                onSave: () => _toggleSaved(articlePost),
+                onDiscuss: () =>
+                    CommentsBottomSheet.show(context, articlePost.id),
+                onShare: () => _shareArticle(context, articlePost),
+                onFollow: () {
+                  if (currentUserId != null &&
+                      structuredData.authorId != null) {
+                    ref.read(userRepositoryProvider).toggleFollowUser(
+                          currentUserId: currentUserId,
+                          targetUserId: structuredData.authorId!,
+                          follow: !isFollowing,
+                        );
+                  }
+                },
+              ),
+            ],
           ),
         ],
       ),
